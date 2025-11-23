@@ -2,7 +2,7 @@
 
 **Version**: 0.1.0-alpha (MVP)
 **Status**: Production-ready for one-way synchronization
-**License**: [To be determined]
+**License**: MIT
 
 Cross-platform file synchronization utility built in Go, optimized for performance with advanced hash comparison and parallel operations.
 
@@ -438,7 +438,11 @@ Contributions are welcome! Priority areas:
 
 ## License
 
-[License information to be determined]
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+### Third-Party Licenses
+
+This project uses several open-source libraries. See [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for detailed license information about dependencies.
 
 ## Credits
 
