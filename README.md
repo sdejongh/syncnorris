@@ -42,6 +42,12 @@ Cross-platform file synchronization utility built in Go, optimized for performan
   - Accurate ETA calculation
   - Terminal width detection (prevents line wrapping)
 - ✅ **Human-readable output** with comprehensive summary statistics
+- ✅ **Differences report** (optional)
+  - Lists files remaining different after sync/compare
+  - Includes reason for each difference (copy error, hash mismatch, etc.)
+  - Supports human-readable and JSON formats
+  - No file created if everything synchronized
+  - JSON output suitable for automation/scripting
 - ✅ **Quiet mode** for scripts (suppress non-error output)
 - ✅ **Verbose mode** for debugging
 
@@ -197,6 +203,8 @@ syncnorris help      # Show help for any command
 --dry-run            Compare only, don't sync
 --parallel, -p N     Number of parallel workers (default: CPU count)
 --mode oneway        Sync mode (only 'oneway' currently supported)
+--diff-report FILE   Write differences report to file (optional)
+--diff-format FORMAT Report format: human, json (default: human)
 ```
 
 #### Global Flags
@@ -223,13 +231,15 @@ These flags are accepted for future compatibility but currently have no effect:
 ### Backup Important Data
 
 ```bash
-# Daily backup with hash verification
+# Daily backup with hash verification and differences report
 syncnorris sync \
   --source ~/Documents \
   --dest /mnt/backup/Documents \
-  --comparison hash
+  --comparison hash \
+  --diff-report /var/log/backup-diff.txt
 
-# View the generated report
+# Check if there were any differences
+cat /var/log/backup-diff.txt
 ```
 
 ### Fast Re-Sync After Interruption
@@ -266,6 +276,30 @@ syncnorris compare -s /original -d /backup --comparison namesize
 
 # The compare command is equivalent to sync --dry-run
 # It shows what would be copied, updated, or skipped without modifying files
+```
+
+### Generate Differences Report
+
+```bash
+# Create a human-readable report of remaining differences
+syncnorris compare -s /src -d /dst --diff-report differences.txt
+
+# Or after a sync operation
+syncnorris sync -s /src -d /dst --diff-report sync_differences.txt
+
+# Generate JSON report for automation
+syncnorris compare -s /src -d /dst \
+  --diff-report differences.json \
+  --diff-format json
+
+# The report includes:
+# - Files with copy/update errors
+# - Files only in source (not yet copied)
+# - Files only in destination (one-way mode)
+# - Files with hash/content differences
+# - Detailed metadata (size, modification time, hash)
+
+# No report file is created if everything is synchronized
 ```
 
 ### Maximum Performance

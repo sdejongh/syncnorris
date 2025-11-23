@@ -32,6 +32,8 @@ without performing any file operations. This is equivalent to sync --dry-run.`,
 	cmd.Flags().StringVar(&syncFlags.Comparison, "comparison", "hash", "comparison method: namesize, md5, binary, hash")
 	cmd.Flags().StringSliceVar(&syncFlags.Exclude, "exclude", []string{}, "glob patterns to exclude")
 	cmd.Flags().StringVarP(&syncFlags.Output, "output", "o", "human", "output format: human, json")
+	cmd.Flags().StringVar(&syncFlags.DiffReport, "diff-report", "", "write differences report to file")
+	cmd.Flags().StringVar(&syncFlags.DiffFormat, "diff-format", "human", "differences report format: human, json")
 
 	return cmd
 }
@@ -116,6 +118,13 @@ func runCompare(cmd *cobra.Command, args []string) error {
 	report, err := engine.Run(ctx)
 	if err != nil {
 		return fmt.Errorf("comparison failed: %w", err)
+	}
+
+	// Write differences report if requested
+	if syncFlags.DiffReport != "" {
+		if err := output.WriteDifferencesReport(report, syncFlags.DiffReport, syncFlags.DiffFormat); err != nil {
+			return fmt.Errorf("failed to write differences report: %w", err)
+		}
 	}
 
 	// Exit with appropriate code

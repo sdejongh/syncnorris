@@ -31,6 +31,9 @@ type SyncReport struct {
 	// Errors encountered
 	Errors []SyncError
 
+	// Differences remaining after sync/compare
+	Differences []FileDifference
+
 	// Overall status
 	Status SyncStatus
 }
@@ -105,4 +108,42 @@ func (s SyncStatus) ExitCode() int {
 	default:
 		return 2
 	}
+}
+
+// FileDifference represents a file that remains different after sync/compare
+type FileDifference struct {
+	RelativePath string           `json:"relative_path"`
+	Reason       DifferenceReason `json:"reason"`
+	Details      string           `json:"details,omitempty"`
+	SourceInfo   *FileInfo        `json:"source_info,omitempty"` // nil if file doesn't exist in source
+	DestInfo     *FileInfo        `json:"dest_info,omitempty"`   // nil if file doesn't exist in dest
+}
+
+// DifferenceReason indicates why files remain different
+type DifferenceReason string
+
+const (
+	// ReasonCopyError indicates file copy failed
+	ReasonCopyError DifferenceReason = "copy_error"
+	// ReasonUpdateError indicates file update failed
+	ReasonUpdateError DifferenceReason = "update_error"
+	// ReasonSizeDiff indicates files have different sizes
+	ReasonSizeDiff DifferenceReason = "size_different"
+	// ReasonHashDiff indicates files have different hashes
+	ReasonHashDiff DifferenceReason = "hash_different"
+	// ReasonContentDiff indicates files have different content (binary comparison)
+	ReasonContentDiff DifferenceReason = "content_different"
+	// ReasonOnlyInSource indicates file exists only in source (not copied yet or copy failed)
+	ReasonOnlyInSource DifferenceReason = "only_in_source"
+	// ReasonOnlyInDest indicates file exists only in destination (one-way mode)
+	ReasonOnlyInDest DifferenceReason = "only_in_dest"
+	// ReasonSkipped indicates file was intentionally skipped
+	ReasonSkipped DifferenceReason = "skipped"
+)
+
+// FileInfo holds metadata about a file for difference reporting
+type FileInfo struct {
+	Size    int64     `json:"size"`
+	ModTime time.Time `json:"mod_time"`
+	Hash    string    `json:"hash,omitempty"` // may be empty
 }

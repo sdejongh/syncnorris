@@ -233,6 +233,9 @@ func (e *Engine) Run(ctx context.Context) (*models.SyncReport, error) {
 		}
 	}
 
+	// Collect remaining differences
+	e.collectDifferences(report, operations)
+
 	// Finalize report
 	report.EndTime = time.Now()
 	report.Duration = report.EndTime.Sub(report.StartTime)
@@ -492,4 +495,93 @@ func (e *Engine) planOperations(ctx context.Context, sourceFiles, destFiles []st
 func (e *Engine) executeOneWay(ctx context.Context, operations []models.FileOperation, report *models.SyncReport) error {
 	worker := NewWorker(e.source, e.dest, e.operation.MaxWorkers)
 	return worker.Execute(ctx, operations, report, e.formatter)
+}
+
+// collectDifferences analyzes operations and builds list of remaining differences
+func (e *Engine) collectDifferences(report *models.SyncReport, operations []models.FileOperation) {
+	report.Differences = make([]models.FileDifference, 0)
+
+	for _, op := range operations {
+		var diff models.FileDifference
+		var shouldInclude bool
+
+		diff.RelativePath = op.Entry.RelativePath
+
+		switch op.Action {
+		case models.ActionCopy:
+			if op.Error != nil {
+				// Copy failed - file still only in source
+				diff.Reason = models.ReasonCopyError
+				diff.Details = op.Error.Error()
+				diff.SourceInfo = &models.FileInfo{
+					Size:    op.Entry.Size,
+					ModTime: op.Entry.ModTime,
+					Hash:    op.Entry.Hash,
+				}
+				shouldInclude = true
+			} else if e.operation.DryRun {
+				// Dry-run mode: file exists only in source and would be copied
+				diff.Reason = models.ReasonOnlyInSource
+				diff.Details = "file would be copied (dry-run mode)"
+				diff.SourceInfo = &models.FileInfo{
+					Size:    op.Entry.Size,
+					ModTime: op.Entry.ModTime,
+					Hash:    op.Entry.Hash,
+				}
+				shouldInclude = true
+			}
+
+		case models.ActionUpdate:
+			if op.Error != nil {
+				// Update failed - files remain different
+				diff.Reason = models.ReasonUpdateError
+				diff.Details = op.Error.Error()
+				diff.SourceInfo = &models.FileInfo{
+					Size:    op.Entry.Size,
+					ModTime: op.Entry.ModTime,
+					Hash:    op.Entry.Hash,
+				}
+				// We don't have easy access to dest info here, would need to query
+				shouldInclude = true
+			} else if e.operation.DryRun {
+				// Dry-run mode: files are different and would be updated
+				diff.Reason = models.ReasonHashDiff
+				diff.Details = "files have different content (dry-run mode)"
+				diff.SourceInfo = &models.FileInfo{
+					Size:    op.Entry.Size,
+					ModTime: op.Entry.ModTime,
+					Hash:    op.Entry.Hash,
+				}
+				shouldInclude = true
+			}
+
+		case models.ActionSkip:
+			if op.Reason == "file exists only in destination" {
+				// One-way mode: file in dest but not source
+				diff.Reason = models.ReasonOnlyInDest
+				diff.Details = op.Reason
+				diff.DestInfo = &models.FileInfo{
+					Size:    op.Entry.Size,
+					ModTime: op.Entry.ModTime,
+					Hash:    op.Entry.Hash,
+				}
+				shouldInclude = true
+			} else if op.Reason != "files are identical" {
+				// Skipped for other reasons (future: exclude patterns)
+				diff.Reason = models.ReasonSkipped
+				diff.Details = op.Reason
+				diff.SourceInfo = &models.FileInfo{
+					Size:    op.Entry.Size,
+					ModTime: op.Entry.ModTime,
+					Hash:    op.Entry.Hash,
+				}
+				shouldInclude = true
+			}
+			// Skip "files are identical" - these are synchronized, not differences
+		}
+
+		if shouldInclude {
+			report.Differences = append(report.Differences, diff)
+		}
+	}
 }

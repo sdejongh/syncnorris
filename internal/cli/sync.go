@@ -15,16 +15,18 @@ import (
 
 // SyncFlags holds sync command flags
 type SyncFlags struct {
-	Source      string
-	Dest        string
-	Mode        string
-	Comparison  string
-	Conflict    string
-	DryRun      bool
-	Parallel    int
-	Bandwidth   string
-	Exclude     []string
-	Output      string
+	Source       string
+	Dest         string
+	Mode         string
+	Comparison   string
+	Conflict     string
+	DryRun       bool
+	Parallel     int
+	Bandwidth    string
+	Exclude      []string
+	Output       string
+	DiffReport   string
+	DiffFormat   string
 }
 
 var syncFlags SyncFlags
@@ -54,6 +56,8 @@ Supports one-way and bidirectional sync with multiple comparison methods.`,
 	cmd.Flags().StringVarP(&syncFlags.Bandwidth, "bandwidth", "b", "", "bandwidth limit (e.g., \"10M\", \"1G\")")
 	cmd.Flags().StringSliceVar(&syncFlags.Exclude, "exclude", []string{}, "glob patterns to exclude")
 	cmd.Flags().StringVarP(&syncFlags.Output, "output", "o", "human", "output format: human, json")
+	cmd.Flags().StringVar(&syncFlags.DiffReport, "diff-report", "", "write differences report to file")
+	cmd.Flags().StringVar(&syncFlags.DiffFormat, "diff-format", "human", "differences report format: human, json")
 
 	return cmd
 }
@@ -139,6 +143,13 @@ func runSync(cmd *cobra.Command, args []string) error {
 	report, err := engine.Run(ctx)
 	if err != nil {
 		return fmt.Errorf("sync failed: %w", err)
+	}
+
+	// Write differences report if requested
+	if syncFlags.DiffReport != "" {
+		if err := output.WriteDifferencesReport(report, syncFlags.DiffReport, syncFlags.DiffFormat); err != nil {
+			return fmt.Errorf("failed to write differences report: %w", err)
+		}
 	}
 
 	// Exit with appropriate code
