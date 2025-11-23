@@ -1,0 +1,102 @@
+# Configuration GoReleaser pour syncnorris
+version: 2
+
+before:
+  hooks:
+    # Vérifier que les dépendances sont à jour
+    - go mod tidy
+    # Exécuter les tests avant la release
+    - go test ./...
+
+builds:
+  - id: syncnorris
+    main: ./cmd/syncnorris
+    binary: syncnorris
+    env:
+      - CGO_ENABLED=0  # Binaires statiques sans dépendances C
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    # Ignorer certaines combinaisons si nécessaire
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      # Injecter la version dans le binaire
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+
+archives:
+  - id: syncnorris-archive
+    format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      # Utiliser .zip pour Windows
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - README.md
+      - THIRD_PARTY_LICENSES.md
+      - config/config.example.yaml
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - Merge pull request
+      - Merge branch
+
+release:
+  github:
+    owner: sdejongh
+    name: syncnorris
+  draft: false
+  prerelease: auto
+  mode: replace
+  name_template: "{{.ProjectName}} {{.Version}}"
+  header: |
+    ## syncnorris {{.Version}}
+
+    Cross-platform file synchronization utility built in Go.
+
+  footer: |
+    ---
+
+    **Installation**
+
+    Download the archive for your platform, extract it, and add the binary to your PATH.
+
+    **Full Changelog**: https://github.com/sdejongh/syncnorris/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+# Génération d'autocompletions shell (optionnel)
+# Décommenter si vous ajoutez le support cobra pour les completions
+# completions:
+#   - id: syncnorris-completions
+#     ids:
+#       - syncnorris
+#     formats:
+#       - bash
+#       - zsh
+#       - fish
+#       - powershell

@@ -8,7 +8,11 @@ import (
 	"github.com/sdejongh/syncnorris/internal/cli"
 )
 
-var version = "dev"
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
 
 func main() {
 	if err := run(); err != nil {
@@ -24,7 +28,7 @@ func run() error {
 		Long: `syncnorris is a cross-platform file synchronization utility built in Go.
 It supports one-way and bidirectional synchronization between local folders,
 network shares, and remote storage with multiple comparison methods.`,
-		Version: version,
+		Version: fmt.Sprintf("%s (commit: %s, built: %s)", version, commit, date),
 		SilenceUsage: true,
 		SilenceErrors: true,
 	}
