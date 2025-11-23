@@ -100,55 +100,76 @@ func (c *HashComparator) Compare(ctx context.Context, source, dest storage.Backe
 		}, nil
 	}
 
-	// Partial hash optimization for large files
+	// Partial hash optimization for large files (parallel execution)
 	// If files are large enough and partial hashing is enabled,
 	// compute partial hashes first for quick rejection
 	if c.enablePartialHash && sourceInfo.Size >= partialHashThreshold {
-		sourcePartialHash, err := c.computePartialHash(ctx, source, sourcePath)
-		if err != nil {
-			// If partial hash fails, fall back to full hash
-			// (don't fail the entire comparison)
-		} else {
-			destPartialHash, err := c.computePartialHash(ctx, dest, destPath)
-			if err != nil {
-				// If partial hash fails, fall back to full hash
-			} else {
-				// If partial hashes differ, files are different - no need for full hash
-				if sourcePartialHash != destPartialHash {
-					return &Comparison{
-						SourcePath: sourcePath,
-						DestPath:   destPath,
-						Result:     Different,
-						Reason:     "file partial hashes differ",
-					}, nil
-				}
-				// Partial hashes match - continue to full hash verification
+		var sourcePartialHash, destPartialHash string
+		var sourcePartialErr, destPartialErr error
+		var wg sync.WaitGroup
+
+		// Compute both partial hashes in parallel
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			sourcePartialHash, sourcePartialErr = c.computePartialHash(ctx, source, sourcePath)
+		}()
+		go func() {
+			defer wg.Done()
+			destPartialHash, destPartialErr = c.computePartialHash(ctx, dest, destPath)
+		}()
+		wg.Wait()
+
+		// Only use partial hash results if both succeeded
+		if sourcePartialErr == nil && destPartialErr == nil {
+			// If partial hashes differ, files are different - no need for full hash
+			if sourcePartialHash != destPartialHash {
+				return &Comparison{
+					SourcePath: sourcePath,
+					DestPath:   destPath,
+					Result:     Different,
+					Reason:     "file partial hashes differ",
+				}, nil
 			}
+			// Partial hashes match - continue to full hash verification
 		}
+		// If either partial hash fails, fall back to full hash (don't fail the comparison)
 	}
 
-	// Compute source hash
-	sourceHash, err := c.computeHash(ctx, source, sourcePath)
-	if err != nil {
+	// Compute full hashes in parallel
+	var sourceHash, destHash string
+	var sourceHashErr, destHashErr error
+	var wg sync.WaitGroup
+
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		sourceHash, sourceHashErr = c.computeHash(ctx, source, sourcePath)
+	}()
+	go func() {
+		defer wg.Done()
+		destHash, destHashErr = c.computeHash(ctx, dest, destPath)
+	}()
+	wg.Wait()
+
+	// Check for errors
+	if sourceHashErr != nil {
 		return &Comparison{
 			SourcePath: sourcePath,
 			DestPath:   destPath,
 			Result:     Error,
 			Reason:     "failed to compute source hash",
-			Error:      err,
-		}, err
+			Error:      sourceHashErr,
+		}, sourceHashErr
 	}
-
-	// Compute destination hash
-	destHash, err := c.computeHash(ctx, dest, destPath)
-	if err != nil {
+	if destHashErr != nil {
 		return &Comparison{
 			SourcePath: sourcePath,
 			DestPath:   destPath,
 			Result:     Error,
 			Reason:     "failed to compute destination hash",
-			Error:      err,
-		}, err
+			Error:      destHashErr,
+		}, destHashErr
 	}
 
 	// Compare hashes
