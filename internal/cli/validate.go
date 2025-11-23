@@ -67,9 +67,10 @@ func validateSyncFlags() error {
 		"timestamp": true,
 		"binary":    true,
 		"hash":      true,
+		"md5":       true,
 	}
 	if !validComparisons[syncFlags.Comparison] {
-		return fmt.Errorf("invalid comparison method: %s (valid: namesize, timestamp, binary, hash)", syncFlags.Comparison)
+		return fmt.Errorf("invalid comparison method: %s (valid: namesize, timestamp, binary, hash, md5)", syncFlags.Comparison)
 	}
 
 	// Validate conflict resolution

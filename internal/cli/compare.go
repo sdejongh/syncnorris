@@ -22,7 +22,7 @@ without performing any file operations. This is equivalent to sync --dry-run.`,
 	cmd.MarkFlagRequired("source")
 	cmd.MarkFlagRequired("dest")
 
-	cmd.Flags().StringVar(&syncFlags.Comparison, "comparison", "hash", "comparison method: namesize, timestamp, binary, hash")
+	cmd.Flags().StringVar(&syncFlags.Comparison, "comparison", "hash", "comparison method: namesize, md5, binary, hash")
 	cmd.Flags().StringSliceVar(&syncFlags.Exclude, "exclude", []string{}, "glob patterns to exclude")
 	cmd.Flags().StringVarP(&syncFlags.Output, "output", "o", "human", "output format: human, json")
 

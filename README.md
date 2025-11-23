@@ -21,6 +21,14 @@ Cross-platform file synchronization utility built in Go, optimized for performan
   - Partial hashing for large files (≥1MB): 95% I/O reduction for quick rejection
   - Parallel hash computation: 1.8-1.9x speedup
   - Buffer pooling for reduced memory pressure
+- ✅ **MD5 hash comparison** (faster alternative to SHA-256)
+  - Similar performance to SHA-256 but less secure
+  - Suitable for non-critical data where speed matters
+  - Also supports partial hashing and parallel computation
+- ✅ **Binary comparison** (byte-by-byte verification)
+  - Most thorough comparison method
+  - Reports exact byte offset where files differ
+  - Useful for debugging or when hash collisions are a concern
 - ✅ **Name/size comparison** (fast metadata-only mode)
   - Ideal for re-sync scenarios: 10-40x faster than hash mode
   - Sub-second re-sync for 1000 identical files
@@ -68,7 +76,6 @@ These features are **NOT yet implemented** but are planned for future releases:
 - 🚧 **Exclude patterns** (glob-based filtering)
 - 🚧 **Bandwidth limiting** for network-constrained environments
 - 🚧 **Timestamp comparison** method
-- 🚧 **Binary comparison** method (byte-by-byte)
 - 🚧 **Logging** to files (JSON, plain text)
 - 🚧 **Resume interrupted operations**
 - 🚧 **Native network storage** (SMB/Samba, NFS without mounting)
@@ -149,7 +156,7 @@ Create a config file at `~/.config/syncnorris/config.yaml`:
 ```yaml
 sync:
   mode: oneway                    # Only 'oneway' currently supported
-  comparison: hash                # 'hash' or 'namesize'
+  comparison: hash                # 'hash', 'md5', 'binary', or 'namesize'
 
 performance:
   max_workers: 8                  # Parallel worker count (0 = CPU count)
@@ -186,7 +193,7 @@ syncnorris help      # Show help for any command
 
 #### Functional Flags (Implemented)
 ```
---comparison METHOD  Comparison method: hash, namesize (default: hash)
+--comparison METHOD  Comparison method: hash, md5, binary, namesize (default: hash)
 --dry-run            Compare only, don't sync
 --parallel, -p N     Number of parallel workers (default: CPU count)
 --mode oneway        Sync mode (only 'oneway' currently supported)
@@ -205,7 +212,6 @@ These flags are accepted for future compatibility but currently have no effect:
 ```
 --mode bidirectional      # Returns error: not yet implemented
 --comparison timestamp    # Falls back to hash comparison
---comparison binary       # Falls back to hash comparison
 --output json             # Falls back to human-readable output
 --bandwidth, -b LIMIT     # Not yet implemented (no rate limiting)
 --exclude PATTERN         # Not yet implemented (no filtering)
@@ -257,14 +263,37 @@ syncnorris sync \
   --comparison namesize
 ```
 
+### Fast Hash Verification
+
+```bash
+# Use MD5 for faster hash-based comparison (less secure than SHA-256)
+syncnorris sync \
+  -s /media/photos \
+  -d /backup/photos \
+  --comparison md5
+```
+
+### Debugging File Differences
+
+```bash
+# Use binary comparison to find exact byte offset where files differ
+syncnorris sync \
+  -s /original \
+  -d /modified \
+  --comparison binary \
+  --dry-run
+```
+
 ## Performance Tips
 
 1. **First sync**: Use `--comparison hash` (default) for cryptographic verification
 2. **Re-sync**: Use `--comparison namesize` for 10-40x speedup on unchanged files
-3. **Large files**: Hash comparison automatically uses partial hashing (≥1MB)
-4. **Network storage**: Mount shares locally rather than waiting for native SMB/NFS support
-5. **Worker count**: Default (CPU count) is optimal for most scenarios
-6. **Progress overhead**: Already optimized (93% reduction), no tuning needed
+3. **Fast hash**: Use `--comparison md5` for slightly faster hashing (less secure than SHA-256)
+4. **Debugging**: Use `--comparison binary` for byte-by-byte verification with exact offset reporting
+5. **Large files**: Hash comparison (SHA-256/MD5) automatically uses partial hashing (≥1MB)
+6. **Network storage**: Mount shares locally rather than waiting for native SMB/NFS support
+7. **Worker count**: Default (CPU count) is optimal for most scenarios
+8. **Progress overhead**: Already optimized (93% reduction), no tuning needed
 
 ## Project Structure
 

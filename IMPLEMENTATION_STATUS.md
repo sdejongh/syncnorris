@@ -23,6 +23,14 @@ syncnorris is currently in **MVP/Alpha** state with core one-way synchronization
   - Partial hashing for large files (≥1MB, 256KB preview)
   - Parallel hash computation (source/dest concurrent)
   - Buffer pooling for reduced GC pressure
+- ✅ **MD5 hash comparison**
+  - Similar performance to SHA-256 but less secure
+  - Also supports partial hashing and parallel computation
+  - Suitable for non-critical data where speed matters
+- ✅ **Binary comparison** (byte-by-byte)
+  - Most thorough comparison method
+  - Reports exact byte offset where files differ
+  - Useful for debugging or when hash collisions are a concern
 - ✅ **Name/size comparison**
   - Fast metadata-only comparison
   - Ideal for re-sync scenarios
@@ -72,7 +80,6 @@ syncnorris is currently in **MVP/Alpha** state with core one-way synchronization
 These flags are accepted by the CLI but have no effect:
 
 - ⚠️ **--comparison timestamp** - Flag exists, no code implementation
-- ⚠️ **--comparison binary** - Flag exists, no code implementation
 - ⚠️ **--bandwidth / -b** - Flag exists, config field present, but no rate limiting code
 - ⚠️ **--exclude** - Flag exists, config field present, but patterns not applied
 - ⚠️ **--conflict** - Flag exists for future bidirectional support
@@ -93,10 +100,6 @@ These flags are accepted by the CLI but have no effect:
 - ❌ **Timestamp comparison**
   - Model defined, comparator not implemented
   - Would be faster than hash for some scenarios
-
-- ❌ **Binary comparison**
-  - Model defined, comparator not implemented
-  - Byte-by-byte comparison for ultra-paranoid mode
 
 ### Medium Priority (Performance & UX)
 - ❌ **Bandwidth limiting**
@@ -170,6 +173,8 @@ All performance goals met or exceeded:
 --dest, -d         # Destination directory (required)
 --mode oneway      # One-way sync (only mode that works)
 --comparison hash  # SHA-256 hash comparison
+--comparison md5   # MD5 hash comparison
+--comparison binary  # Byte-by-byte binary comparison
 --comparison namesize  # Name+size only comparison
 --dry-run          # Preview changes without syncing
 --parallel, -p     # Number of parallel workers
@@ -181,7 +186,6 @@ All performance goals met or exceeded:
 # NON-FUNCTIONAL FLAGS (accepted but ignored)
 --mode bidirectional      # Returns error
 --comparison timestamp    # Falls back to hash
---comparison binary       # Falls back to hash
 --output json             # Falls back to human
 --bandwidth, -b           # No effect
 --exclude                 # No effect
@@ -276,9 +280,9 @@ golang.org/x/term             v0.37.0  // Terminal width detection - USED
 
 ## Version Roadmap
 
-- **v0.1.0 (Current)**: MVP - One-way sync with hash comparison ✅
+- **v0.1.0 (Current)**: MVP - One-way sync with hash/MD5/binary/namesize comparison ✅
 - **v0.2.0**: JSON output, exclude patterns, logging, bandwidth limiting
-- **v0.3.0**: Bidirectional sync, conflict resolution, all comparison methods
+- **v0.3.0**: Bidirectional sync, conflict resolution, timestamp comparison
 - **v1.0.0**: Production-ready with network storage, comprehensive tests
 - **v2.0.0**: Advanced features (resume, S3, incremental binary diff)
 

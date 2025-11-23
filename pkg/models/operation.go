@@ -42,6 +42,8 @@ const (
 	CompareBinary ComparisonMethod = "binary"
 	// CompareHash compares SHA-256 hashes
 	CompareHash ComparisonMethod = "hash"
+	// CompareMD5 compares MD5 hashes (faster than SHA-256, less secure)
+	CompareMD5 ComparisonMethod = "md5"
 )
 
 // SyncOperation represents a sync operation configuration

@@ -47,7 +47,7 @@ Supports one-way and bidirectional sync with multiple comparison methods.`,
 
 	// Optional flags
 	cmd.Flags().StringVarP(&syncFlags.Mode, "mode", "m", "oneway", "sync mode: oneway, bidirectional")
-	cmd.Flags().StringVar(&syncFlags.Comparison, "comparison", "hash", "comparison method: namesize, timestamp, binary, hash")
+	cmd.Flags().StringVar(&syncFlags.Comparison, "comparison", "hash", "comparison method: namesize, md5, binary, hash")
 	cmd.Flags().StringVar(&syncFlags.Conflict, "conflict", "ask", "conflict resolution: ask, source-wins, dest-wins, newer, both")
 	cmd.Flags().BoolVar(&syncFlags.DryRun, "dry-run", false, "compare only, don't sync")
 	cmd.Flags().IntVarP(&syncFlags.Parallel, "parallel", "p", 0, "number of parallel workers (default: CPU count)")
@@ -98,19 +98,30 @@ func runSync(cmd *cobra.Command, args []string) error {
 	defer dest.Close()
 
 	// Create comparator
-	// Use composite comparator for intelligent comparison strategy:
-	// - Always check name+size first (fast)
-	// - Only hash if requested AND name+size match
 	var comparator compare.Comparator
 	switch operation.ComparisonMethod {
 	case models.CompareNameSize:
 		// Fast: name+size only, no hash verification
+		// Uses composite comparator without hash stage
 		comparator = compare.NewCompositeComparator(false, cfg.Performance.BufferSize)
+
 	case models.CompareHash:
-		// Secure: name+size first, then hash if needed
+		// Secure: SHA-256 hash comparison
+		// Uses composite comparator with SHA-256 hash
 		comparator = compare.NewCompositeComparator(true, cfg.Performance.BufferSize)
+
+	case models.CompareMD5:
+		// Fast hash: MD5 comparison (faster than SHA-256, less secure)
+		// Suitable for non-critical data where speed matters
+		comparator = compare.NewMD5Comparator(cfg.Performance.BufferSize)
+
+	case models.CompareBinary:
+		// Thorough: byte-by-byte comparison
+		// Slowest but most precise (reports exact byte offset of difference)
+		comparator = compare.NewBinaryComparator(cfg.Performance.BufferSize)
+
 	default:
-		return fmt.Errorf("unsupported comparison method: %s", operation.ComparisonMethod)
+		return fmt.Errorf("unsupported comparison method: %s (use: namesize, md5, binary, hash)", operation.ComparisonMethod)
 	}
 
 	// Create output formatter
