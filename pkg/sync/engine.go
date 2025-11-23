@@ -151,7 +151,7 @@ func (e *Engine) Run(ctx context.Context) (*models.SyncReport, error) {
 	}
 
 	// Initialize formatter before comparison phase
-	if e.formatter != nil && !e.operation.DryRun {
+	if e.formatter != nil {
 		e.formatter.Start(nil, totalFilesToProcess, totalBytesToProcess)
 	}
 
@@ -178,6 +178,11 @@ func (e *Engine) Run(ctx context.Context) (*models.SyncReport, error) {
 			e.logger.Info(ctx, "Dry-run mode: skipping execution", nil)
 		}
 		report.Stats.FilesSkipped.Store(int32(len(operations)))
+
+		// Display comparison results in dry-run mode
+		if e.formatter != nil {
+			e.formatter.Complete(report)
+		}
 	} else {
 		// Don't reinitialize the formatter - keep the comparison phase counters
 		// Synchronized files will be counted as they are processed

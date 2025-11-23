@@ -1,9 +1,16 @@
 package cli
 
 import (
+	"context"
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/sdejongh/syncnorris/pkg/compare"
+	"github.com/sdejongh/syncnorris/pkg/models"
+	"github.com/sdejongh/syncnorris/pkg/output"
+	"github.com/sdejongh/syncnorris/pkg/storage"
+	"github.com/sdejongh/syncnorris/pkg/sync"
 )
 
 // NewCompareCommand creates the compare command
@@ -30,7 +37,88 @@ without performing any file operations. This is equivalent to sync --dry-run.`,
 }
 
 func runCompare(cmd *cobra.Command, args []string) error {
-	// TODO: Implement compare logic
-	fmt.Println("Compare command placeholder - will be implemented in Phase 3")
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	// Validate flags
+	if err := validateSyncFlags(); err != nil {
+		return err
+	}
+
+	// Load configuration
+	cfg, err := loadConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Override config with command-line flags
+	applyFlagsToConfig(cfg)
+
+	// Force dry-run mode for compare command
+	syncFlags.DryRun = true
+
+	// Create sync operation (with dry-run enabled)
+	operation, err := createSyncOperation(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create sync operation: %w", err)
+	}
+
+	// Create storage backends
+	source, err := storage.NewLocal(syncFlags.Source)
+	if err != nil {
+		return fmt.Errorf("failed to create source backend: %w", err)
+	}
+	defer source.Close()
+
+	dest, err := storage.NewLocal(syncFlags.Dest)
+	if err != nil {
+		return fmt.Errorf("failed to create destination backend: %w", err)
+	}
+	defer dest.Close()
+
+	// Create comparator
+	var comparator compare.Comparator
+	switch operation.ComparisonMethod {
+	case models.CompareNameSize:
+		// Fast: name+size only, no hash verification
+		comparator = compare.NewCompositeComparator(false, cfg.Performance.BufferSize)
+
+	case models.CompareHash:
+		// Secure: SHA-256 hash comparison
+		comparator = compare.NewCompositeComparator(true, cfg.Performance.BufferSize)
+
+	case models.CompareMD5:
+		// Fast hash: MD5 comparison
+		comparator = compare.NewMD5Comparator(cfg.Performance.BufferSize)
+
+	case models.CompareBinary:
+		// Thorough: byte-by-byte comparison
+		comparator = compare.NewBinaryComparator(cfg.Performance.BufferSize)
+
+	default:
+		return fmt.Errorf("unsupported comparison method: %s (use: namesize, md5, binary, hash)", operation.ComparisonMethod)
+	}
+
+	// Create output formatter
+	var formatter output.Formatter
+	if cfg.Output.Progress {
+		formatter = output.NewProgressFormatter()
+	} else {
+		formatter = output.NewHumanFormatter()
+	}
+
+	// Create sync engine (logger is nil for now)
+	engine := sync.NewEngine(source, dest, comparator, formatter, nil, operation)
+
+	// Run comparison (dry-run sync)
+	report, err := engine.Run(ctx)
+	if err != nil {
+		return fmt.Errorf("comparison failed: %w", err)
+	}
+
+	// Exit with appropriate code
+	os.Exit(report.Status.ExitCode())
 	return nil
 }

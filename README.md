@@ -248,8 +248,24 @@ syncnorris sync \
 # Dry-run to preview changes
 syncnorris sync -s ~/src -d /mnt/nas/backup --dry-run
 
+# Or use the dedicated compare command
+syncnorris compare -s ~/src -d /mnt/nas/backup
+
 # Review the output, then run actual sync
 syncnorris sync -s ~/src -d /mnt/nas/backup
+```
+
+### Compare Folders
+
+```bash
+# Compare with different methods
+syncnorris compare -s /original -d /backup --comparison hash
+syncnorris compare -s /original -d /backup --comparison md5
+syncnorris compare -s /original -d /backup --comparison binary
+syncnorris compare -s /original -d /backup --comparison namesize
+
+# The compare command is equivalent to sync --dry-run
+# It shows what would be copied, updated, or skipped without modifying files
 ```
 
 ### Maximum Performance
