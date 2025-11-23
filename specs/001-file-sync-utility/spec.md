@@ -3,7 +3,7 @@
 **Feature Branch**: `001-file-sync-utility`
 **Created**: 2025-11-22
 **Last Updated**: 2025-11-23
-**Status**: In Progress - Additional Comparison Methods Implemented
+**Status**: In Progress - Compare Command Implemented
 **Input**: User description: "Je veux créer un utilitaire de synchronisation de fichiers entr edossiers locaux opu travers le réseaux ou encore entre montage locaux multi-plateforme capable de synchroniser deux dossiers de manieère unidirectionnelle ou bi directionnelle mais aussi de comparer deux dossiers autant d'un point de vue nom de fichier et de taille mais aussi sur base d'une comparaison binaire ou une comparaison de hashage. Cet utilitaire doit fonctionner en ligne de commande, proposer une interface claire et moderne et proposer une sortie humainement lisible et agréable tout autant qu'une sortie plus technique au format json."
 
 ## Implementation Progress
@@ -124,6 +124,43 @@
   - Progress reporting during comparison
   - Measured performance: ~11ms for 10 files × 512KB (same content)
   - Short-circuit optimization: stops at first difference
+
+#### Compare Command Implementation (2025-11-23)
+- ✅ **Dedicated Compare Command**: `syncnorris compare` for folder comparison
+  - Functionally equivalent to `sync --dry-run` but with clearer intent
+  - Forces dry-run mode to prevent any file modifications
+  - Reuses entire sync engine for consistency
+  - Supports all comparison methods (hash, md5, binary, namesize)
+  - Displays real-time progress during comparison (hashing, binary checking)
+  - Shows final report with operations that would be performed
+
+- ✅ **Correct Operation Counting in Dry-Run Mode**:
+  - Fixed: All operations were incorrectly marked as "skipped"
+  - Now correctly counts by action type: Copy, Update, Synchronized, Skip
+  - Dry-run and real execution show identical operation counts
+
+- ✅ **Fixed Semantics: Synchronized vs Skipped**:
+  - **Synchronized**: Files already identical on both sides (in sync)
+    - Reason: "files are identical"
+    - Correctly reported in both dry-run and real execution
+  - **Skipped**: Files intentionally excluded by user settings
+    - Reserved for future exclude patterns implementation
+    - Currently shows 0 (no exclusion features yet)
+  - Eliminates confusion: identical files are now clearly "synchronized", not "skipped"
+
+- ✅ **Compare Command Features**:
+  - All comparison methods work: `--comparison hash|md5|binary|namesize`
+  - Progress display shows hash/binary verification in real-time
+  - Final report shows exactly what would be copied/updated/synchronized
+  - Exit code reflects comparison status
+  - Example output for mixed scenario:
+    ```
+    Operations:
+      Files copied:       1  (new in source)
+      Files updated:      1  (different content)
+      Files synchronized: 1  (identical)
+      Files skipped:      0  (none excluded)
+    ```
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -278,31 +315,36 @@ A DevOps engineer needs to integrate the sync tool into automated backup scripts
 
 #### Comparison-Only Mode
 
-- **FR-023**: System MUST support dry-run/comparison mode that reports what would be changed without modifying files
-- **FR-024**: Comparison mode MUST categorize differences as: additions, modifications, deletions
-- **FR-025**: System MUST display total size of data that would be transferred in dry-run mode
+- **FR-024**: ✅ System MUST support dry-run/comparison mode that reports what would be changed without modifying files
+- **FR-024a**: ✅ System MUST provide dedicated `compare` command as alternative to `sync --dry-run`
+- **FR-024b**: ✅ Comparison mode MUST support all comparison methods (hash, md5, binary, namesize)
+- **FR-024c**: ✅ Comparison mode MUST display real-time progress during hash/binary verification
+- **FR-025**: ✅ Comparison mode MUST categorize differences as: additions (copy), modifications (update), synchronized (identical)
+- **FR-025a**: ✅ System MUST distinguish "synchronized" (identical files) from "skipped" (excluded files)
+- **FR-025b**: ✅ Dry-run and real execution MUST report identical operation counts for consistency
+- **FR-026**: ✅ System MUST display total size of data that would be transferred in dry-run mode
 
 #### Error Handling
 
-- **FR-026**: System MUST gracefully handle and report file permission errors
-- **FR-027**: System MUST detect and report insufficient disk space before starting transfers
-- **FR-028**: System MUST handle network connectivity interruptions and report which files failed
-- **FR-029**: System MUST provide option to resume interrupted sync operations
-- **FR-030**: System MUST log all errors with sufficient context for debugging
+- **FR-027**: System MUST gracefully handle and report file permission errors
+- **FR-028**: System MUST detect and report insufficient disk space before starting transfers
+- **FR-029**: System MUST handle network connectivity interruptions and report which files failed
+- **FR-030**: System MUST provide option to resume interrupted sync operations
+- **FR-031**: System MUST log all errors with sufficient context for debugging
 
 #### Performance
 
-- **FR-031**: ✅ System MUST support parallel file transfers for improved performance
-- **FR-031a**: ✅ System MUST support parallel file comparisons using worker pools
-- **FR-031b**: ✅ System MUST use atomic operations for lock-free statistics updates
-- **FR-031c**: ✅ System MUST throttle progress callbacks to reduce overhead (dual-threshold: bytes and time)
-- **FR-031d**: ✅ System MUST implement partial hashing for quick rejection of differing files (≥1MB)
-- **FR-031e**: ✅ System MUST compute source and destination hashes concurrently for 2x speedup
-- **FR-032**: System MUST provide option to limit transfer speed (bandwidth throttling)
-- **FR-033**: ✅ System MUST handle large directory trees (millions of files) without excessive memory consumption
-- **FR-034**: ✅ System MUST implement composite comparison strategy (metadata before hash)
-- **FR-035**: ✅ System MUST use buffer pooling to minimize memory allocations
-- **FR-036**: ✅ System MUST preserve file metadata (timestamps, permissions) during copy operations
+- **FR-032**: ✅ System MUST support parallel file transfers for improved performance
+- **FR-032a**: ✅ System MUST support parallel file comparisons using worker pools
+- **FR-032b**: ✅ System MUST use atomic operations for lock-free statistics updates
+- **FR-032c**: ✅ System MUST throttle progress callbacks to reduce overhead (dual-threshold: bytes and time)
+- **FR-032d**: ✅ System MUST implement partial hashing for quick rejection of differing files (≥1MB)
+- **FR-032e**: ✅ System MUST compute source and destination hashes concurrently for 2x speedup
+- **FR-033**: System MUST provide option to limit transfer speed (bandwidth throttling)
+- **FR-034**: ✅ System MUST handle large directory trees (millions of files) without excessive memory consumption
+- **FR-035**: ✅ System MUST implement composite comparison strategy (metadata before hash)
+- **FR-036**: ✅ System MUST use buffer pooling to minimize memory allocations
+- **FR-037**: ✅ System MUST preserve file metadata (timestamps, permissions) during copy operations
 
 ### Key Entities
 
@@ -328,7 +370,9 @@ A DevOps engineer needs to integrate the sync tool into automated backup scripts
 
 - **SC-001**: Users can successfully synchronize 10,000 files between local and network storage in under 5 minutes (assuming sufficient network bandwidth)
 - **SC-002**: ✅ System accurately detects 100% of file differences when using hash-based comparison
-- **SC-003**: Users can identify what would change in a dry-run comparison without modifying any files
+- **SC-003**: ✅ Users can identify what would change in a dry-run comparison without modifying any files
+- **SC-003a**: ✅ Compare command correctly categorizes operations (copy, update, synchronized)
+- **SC-003b**: ✅ Compare mode distinguishes synchronized files (identical) from skipped files (excluded)
 - **SC-004**: Automated scripts can parse JSON output without errors and extract all operation metrics
 - **SC-005**: ✅ Tool provides clear progress feedback, showing current file and transfer speed, updating at least 10 times per second (100ms intervals)
 - **SC-005a**: ✅ Progress display shows up to 5 concurrent file operations with real-time status
