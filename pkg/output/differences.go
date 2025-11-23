@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/sdejongh/syncnorris/pkg/models"
@@ -79,8 +80,9 @@ func writeDifferencesHuman(report *models.SyncReport, w io.Writer) error {
 			continue
 		}
 
-		fmt.Fprintf(w, "%s (%d files)\n", reasonLabels[reason], len(diffs))
-		fmt.Fprintf(w, "%s\n", string(make([]rune, len(reasonLabels[reason])+20)))
+		label := fmt.Sprintf("%s (%d files)", reasonLabels[reason], len(diffs))
+		fmt.Fprintf(w, "%s\n", label)
+		fmt.Fprintf(w, "%s\n", strings.Repeat("-", len(label)))
 
 		for _, diff := range diffs {
 			fmt.Fprintf(w, "  %s\n", diff.RelativePath)
