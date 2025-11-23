@@ -216,7 +216,7 @@ func (f *ProgressFormatter) render() {
 	escapeSeq += "\r" // Move cursor to beginning of line
 
 	// Write all escape sequences at once
-	fmt.Fprintf(f.writer, escapeSeq)
+	fmt.Fprint(f.writer, escapeSeq)
 
 	// Flush if the writer supports it to ensure ANSI codes are executed
 	// before we write new content
