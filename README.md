@@ -2,7 +2,7 @@
 
 **Version**: 0.1.0-alpha (MVP)
 **Status**: Production-ready for one-way synchronization
-**License**: MIT
+**License**: Non-Commercial Open Source
 
 Cross-platform file synchronization utility built in Go, optimized for performance with advanced hash comparison and parallel operations.
 
@@ -438,11 +438,24 @@ Contributions are welcome! Priority areas:
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under a **Non-Commercial Open Source License**.
+
+**You are free to:**
+- Clone and use the software for personal or educational purposes
+- Modify the source code
+- Distribute the software and your modifications
+
+**Restrictions:**
+- **Commercial use is NOT permitted** - you may not sell the software or use it in commercial products/services
+- Derivative works must maintain the same non-commercial license terms
+
+For commercial licensing inquiries, please contact the copyright holder.
+
+See the [LICENSE](LICENSE) file for complete terms.
 
 ### Third-Party Licenses
 
-This project uses several open-source libraries. See [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for detailed license information about dependencies.
+This project uses several open-source libraries with permissive licenses (MIT, BSD-3-Clause, Apache-2.0). These dependencies remain under their original licenses and can be used freely, including for commercial purposes. See [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for detailed license information about dependencies.
 
 ## Credits
 
