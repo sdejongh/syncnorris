@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/sdejongh/syncnorris/pkg/models"
+	"golang.org/x/term"
 )
 
 const (
@@ -45,6 +46,7 @@ type ProgressFormatter struct {
 	activeFiles    map[int]*fileProgress // fileIndex -> progress
 	lastDisplay    time.Time
 	displayLines   int // Number of lines currently displayed
+	termWidth      int // Terminal width (for preventing line wrapping)
 
 	// For instantaneous speed calculation
 	speedSamples   []speedSample // History of bytes transferred
@@ -69,6 +71,18 @@ func (f *ProgressFormatter) Start(writer io.Writer, totalFiles int, totalBytes i
 	f.writer = writer
 	f.totalFiles = totalFiles
 	f.totalBytes = totalBytes
+
+	// Detect terminal width to prevent line wrapping issues
+	// Try to get terminal width from stdout
+	if file, ok := writer.(*os.File); ok {
+		if width, _, err := term.GetSize(int(file.Fd())); err == nil && width > 0 {
+			f.termWidth = width
+		}
+	}
+	// Default to 120 if we couldn't detect (pipe, redirect, etc.)
+	if f.termWidth == 0 {
+		f.termWidth = 120
+	}
 
 	// Reset progress counters when starting a new phase
 	f.processedFiles = 0
@@ -185,13 +199,48 @@ func (f *ProgressFormatter) render() {
 		return
 	}
 
-	// Clear previous lines
-	if f.displayLines > 0 {
-		for i := 0; i < f.displayLines; i++ {
-			fmt.Fprintf(f.writer, "\033[A\033[K") // Move up and clear line
-		}
+	// Save cursor position on first render, then restore it on subsequent renders
+	if f.displayLines == 0 {
+		// First render - just display
+		f.renderContent()
+		return
 	}
 
+	// Subsequent renders - move up and clear each line individually
+	// Build all escape sequences into a single string to avoid buffering issues
+	var escapeSeq string
+	for i := 0; i < f.displayLines; i++ {
+		escapeSeq += "\033[1A" // Move up one line
+		escapeSeq += "\033[2K" // Clear entire line
+	}
+	escapeSeq += "\r" // Move cursor to beginning of line
+
+	// Write all escape sequences at once
+	fmt.Fprintf(f.writer, escapeSeq)
+
+	// Flush if the writer supports it to ensure ANSI codes are executed
+	// before we write new content
+	if flusher, ok := f.writer.(interface{ Sync() error }); ok {
+		flusher.Sync()
+	}
+
+	// Now render the new content
+	f.renderContent()
+}
+
+// truncateLine ensures a line doesn't exceed terminal width
+func (f *ProgressFormatter) truncateLine(line string) string {
+	// Account for ANSI color codes which don't take visual space
+	// For simplicity, just truncate based on rune count
+	runes := []rune(line)
+	if len(runes) > f.termWidth {
+		return string(runes[:f.termWidth-3]) + "..."
+	}
+	return line
+}
+
+// renderContent renders the actual progress display
+func (f *ProgressFormatter) renderContent() {
 	lines := 0
 
 	// Show active files (up to maxDisplayFiles), sorted alphabetically
@@ -212,10 +261,12 @@ func (f *ProgressFormatter) render() {
 
 	// Display header if there are active files
 	if len(sortedFiles) > 0 {
-		fmt.Fprintf(f.writer, "%-3s  %-50s  %8s  %12s  %12s\n",
+		header1 := fmt.Sprintf("%-3s  %-50s  %8s  %12s  %12s",
 			"", "File", "Progress", "Copied", "Total")
-		fmt.Fprintf(f.writer, "%-3s  %-50s  %8s  %12s  %12s\n",
+		header2 := fmt.Sprintf("%-3s  %-50s  %8s  %12s  %12s",
 			"", "────────────────────────────────────────────────", "────────", "────────────", "────────────")
+		fmt.Fprintf(f.writer, "%s\n", f.truncateLine(header1))
+		fmt.Fprintf(f.writer, "%s\n", f.truncateLine(header2))
 		lines += 2
 	}
 
@@ -251,13 +302,14 @@ func (f *ProgressFormatter) render() {
 		}
 
 		// Format with aligned columns
-		fmt.Fprintf(f.writer, "%s  %-50s  %7.1f%%  %12s  %12s\n",
+		fileLine := fmt.Sprintf("%s  %-50s  %7.1f%%  %12s  %12s",
 			statusIcon,
 			filename,
 			percent,
 			formatBytes(fp.current),
 			formatBytes(fp.total),
 		)
+		fmt.Fprintf(f.writer, "%s\n", f.truncateLine(fileLine))
 		lines++
 		count++
 	}
@@ -349,7 +401,8 @@ func (f *ProgressFormatter) render() {
 		}
 	}
 
-	fmt.Fprintf(f.writer, "Data:    [%s] %3.0f%% %s/%s",
+	// Build complete data line
+	dataLine := fmt.Sprintf("Data:    [%s] %3.0f%% %s/%s",
 		bytesBar,
 		bytesPercent,
 		formatBytes(currentBytes),
@@ -358,17 +411,17 @@ func (f *ProgressFormatter) render() {
 
 	// Display instantaneous speed and average in parentheses
 	if displaySpeed > 0 {
-		fmt.Fprintf(f.writer, " @ %s/s", formatBytes(displaySpeed))
+		dataLine += fmt.Sprintf(" @ %s/s", formatBytes(displaySpeed))
 		if avgSpeed > 0 && avgSpeed != displaySpeed {
-			fmt.Fprintf(f.writer, " (avg: %s/s)", formatBytes(avgSpeed))
+			dataLine += fmt.Sprintf(" (avg: %s/s)", formatBytes(avgSpeed))
 		}
 	}
 
 	if eta != "" {
-		fmt.Fprintf(f.writer, " ETA: %s", eta)
+		dataLine += fmt.Sprintf(" ETA: %s", eta)
 	}
 
-	fmt.Fprintf(f.writer, "\n")
+	fmt.Fprintf(f.writer, "%s\n", f.truncateLine(dataLine))
 	lines++
 
 	// Second progress bar: Files processed
@@ -391,12 +444,13 @@ func (f *ProgressFormatter) render() {
 		}
 	}
 
-	fmt.Fprintf(f.writer, "Files:   [%s] %3.0f%% (%d/%d files)\n",
+	filesLine := fmt.Sprintf("Files:   [%s] %3.0f%% (%d/%d files)",
 		filesBar,
 		filesPercent,
 		f.processedFiles,
 		f.totalFiles,
 	)
+	fmt.Fprintf(f.writer, "%s\n", f.truncateLine(filesLine))
 	lines++
 
 	f.displayLines = lines
@@ -410,7 +464,7 @@ func (f *ProgressFormatter) Complete(report *models.SyncReport) error {
 	elapsed := time.Since(f.startTime).Seconds()
 	avgSpeed := int64(0)
 	if elapsed > 0 {
-		avgSpeed = int64(float64(report.Stats.BytesTransferred) / elapsed)
+		avgSpeed = int64(float64(report.Stats.BytesTransferred.Load()) / elapsed)
 	}
 
 	f.mu.Unlock()
@@ -429,21 +483,21 @@ func (f *ProgressFormatter) Complete(report *models.SyncReport) error {
 	fmt.Fprintf(f.writer, "\n")
 	fmt.Fprintf(f.writer, "Summary:\n")
 	fmt.Fprintf(f.writer, "  Scanned:\n")
-	fmt.Fprintf(f.writer, "    Source:         %d files, %d dirs\n", report.Stats.SourceFilesScanned, report.Stats.SourceDirsScanned)
-	fmt.Fprintf(f.writer, "    Destination:    %d files, %d dirs\n", report.Stats.DestFilesScanned, report.Stats.DestDirsScanned)
-	fmt.Fprintf(f.writer, "    Unique paths:   %d files, %d dirs\n", report.Stats.FilesScanned, report.Stats.DirsScanned)
+	fmt.Fprintf(f.writer, "    Source:         %d files, %d dirs\n", report.Stats.SourceFilesScanned.Load(), report.Stats.SourceDirsScanned.Load())
+	fmt.Fprintf(f.writer, "    Destination:    %d files, %d dirs\n", report.Stats.DestFilesScanned.Load(), report.Stats.DestDirsScanned.Load())
+	fmt.Fprintf(f.writer, "    Unique paths:   %d files, %d dirs\n", report.Stats.FilesScanned.Load(), report.Stats.DirsScanned.Load())
 	fmt.Fprintf(f.writer, "\n")
 	fmt.Fprintf(f.writer, "  Operations:\n")
-	fmt.Fprintf(f.writer, "    Files copied:       %d\n", report.Stats.FilesCopied)
-	fmt.Fprintf(f.writer, "    Files updated:      %d\n", report.Stats.FilesUpdated)
-	fmt.Fprintf(f.writer, "    Files synchronized: %d\n", report.Stats.FilesSynchronized)
-	fmt.Fprintf(f.writer, "    Files skipped:      %d\n", report.Stats.FilesSkipped)
-	fmt.Fprintf(f.writer, "    Files errored:      %d\n", report.Stats.FilesErrored)
-	fmt.Fprintf(f.writer, "    Dirs created:       %d\n", report.Stats.DirsCreated)
-	fmt.Fprintf(f.writer, "    Dirs deleted:       %d\n", report.Stats.DirsDeleted)
+	fmt.Fprintf(f.writer, "    Files copied:       %d\n", report.Stats.FilesCopied.Load())
+	fmt.Fprintf(f.writer, "    Files updated:      %d\n", report.Stats.FilesUpdated.Load())
+	fmt.Fprintf(f.writer, "    Files synchronized: %d\n", report.Stats.FilesSynchronized.Load())
+	fmt.Fprintf(f.writer, "    Files skipped:      %d\n", report.Stats.FilesSkipped.Load())
+	fmt.Fprintf(f.writer, "    Files errored:      %d\n", report.Stats.FilesErrored.Load())
+	fmt.Fprintf(f.writer, "    Dirs created:       %d\n", report.Stats.DirsCreated.Load())
+	fmt.Fprintf(f.writer, "    Dirs deleted:       %d\n", report.Stats.DirsDeleted.Load())
 	fmt.Fprintf(f.writer, "\n")
 	fmt.Fprintf(f.writer, "  Transfer:\n")
-	fmt.Fprintf(f.writer, "    Data:           %s\n", formatBytes(report.Stats.BytesTransferred))
+	fmt.Fprintf(f.writer, "    Data:           %s\n", formatBytes(report.Stats.BytesTransferred.Load()))
 
 	if avgSpeed > 0 {
 		fmt.Fprintf(f.writer, "    Average speed:  %s/s\n", formatBytes(avgSpeed))

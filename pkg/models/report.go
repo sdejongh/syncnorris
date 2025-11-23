@@ -1,6 +1,7 @@
 package models
 
 import (
+	"sync/atomic"
 	"time"
 )
 
@@ -35,36 +36,37 @@ type SyncReport struct {
 }
 
 // Statistics holds sync operation metrics
+// Uses atomic counters for thread-safe concurrent updates
 type Statistics struct {
 	// Files processed (unique paths)
-	FilesScanned       int // Unique files across source and destination
-	FilesCopied        int
-	FilesUpdated       int
-	FilesDeleted       int
-	FilesSynchronized  int // Files already identical (no copy needed)
-	FilesSkipped       int // Files skipped for other reasons (e.g., dest-only in one-way)
-	FilesErrored       int
+	FilesScanned       atomic.Int32 // Unique files across source and destination
+	FilesCopied        atomic.Int32
+	FilesUpdated       atomic.Int32
+	FilesDeleted       atomic.Int32
+	FilesSynchronized  atomic.Int32 // Files already identical (no copy needed)
+	FilesSkipped       atomic.Int32 // Files skipped for other reasons (e.g., dest-only in one-way)
+	FilesErrored       atomic.Int32
 
 	// Source-specific counts
-	SourceFilesScanned int
-	SourceDirsScanned  int
+	SourceFilesScanned atomic.Int32
+	SourceDirsScanned  atomic.Int32
 
 	// Destination-specific counts
-	DestFilesScanned int
-	DestDirsScanned  int
+	DestFilesScanned atomic.Int32
+	DestDirsScanned  atomic.Int32
 
 	// Directories processed (unique paths)
-	DirsScanned int // Unique directories across source and destination
-	DirsCreated int
-	DirsDeleted int
+	DirsScanned atomic.Int32 // Unique directories across source and destination
+	DirsCreated atomic.Int32
+	DirsDeleted atomic.Int32
 
 	// Data transfer
-	BytesScanned     int64
-	BytesTransferred int64
+	BytesScanned     atomic.Int64
+	BytesTransferred atomic.Int64
 
 	// Performance
-	AverageSpeed     int64 // bytes per second
-	PeakSpeed        int64 // bytes per second
+	AverageSpeed     atomic.Int64 // bytes per second
+	PeakSpeed        atomic.Int64 // bytes per second
 }
 
 // SyncStatus represents the overall result

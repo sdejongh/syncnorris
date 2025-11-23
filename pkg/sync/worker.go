@@ -78,7 +78,7 @@ func NewWorker(source, dest storage.Backend, maxWorkers int) *Worker {
 // Execute processes file operations in parallel
 func (w *Worker) Execute(ctx context.Context, operations []models.FileOperation, report *models.SyncReport, formatter output.Formatter) error {
 	var wg sync.WaitGroup
-	var mu sync.Mutex
+	var errorsMu sync.Mutex // Only for appending to report.Errors slice
 	errChan := make(chan error, len(operations))
 
 	currentFile := 0
@@ -88,15 +88,14 @@ func (w *Worker) Execute(ctx context.Context, operations []models.FileOperation,
 
 		// Skip operations that don't require action
 		if op.Action == models.ActionSkip {
-			mu.Lock()
 			// Distinguish between synchronized (identical) and skipped (other reasons)
+			// Use atomic operations - no mutex needed
 			if op.Reason == "files are identical" {
-				report.Stats.FilesSynchronized++
+				report.Stats.FilesSynchronized.Add(1)
 				// Note: formatter was already notified during comparison phase
 			} else {
-				report.Stats.FilesSkipped++
+				report.Stats.FilesSkipped.Add(1)
 			}
-			mu.Unlock()
 			continue
 		}
 
@@ -132,16 +131,20 @@ func (w *Worker) Execute(ctx context.Context, operations []models.FileOperation,
 			err := w.copyFile(ctx, operation, formatter, fileIndex)
 			operation.Duration = time.Since(startTime)
 
-			mu.Lock()
 			if err != nil {
 				operation.Error = err
-				report.Stats.FilesErrored++
+				// Atomic increment for error counter
+				report.Stats.FilesErrored.Add(1)
+
+				// Mutex only needed for appending to slice (not thread-safe)
+				errorsMu.Lock()
 				report.Errors = append(report.Errors, models.SyncError{
 					FilePath:  operation.Entry.RelativePath,
 					Operation: operation.Action,
 					Error:     err.Error(),
 					Timestamp: time.Now(),
 				})
+				errorsMu.Unlock()
 
 				// Notify formatter of error
 				if formatter != nil {
@@ -154,12 +157,14 @@ func (w *Worker) Execute(ctx context.Context, operations []models.FileOperation,
 				}
 			} else {
 				operation.BytesCopied = operation.Entry.Size
-				report.Stats.BytesTransferred += operation.Entry.Size
+				// Atomic add for bytes transferred
+				report.Stats.BytesTransferred.Add(operation.Entry.Size)
 
+				// Atomic increment for file counters
 				if operation.Action == models.ActionCopy {
-					report.Stats.FilesCopied++
+					report.Stats.FilesCopied.Add(1)
 				} else if operation.Action == models.ActionUpdate {
-					report.Stats.FilesUpdated++
+					report.Stats.FilesUpdated.Add(1)
 				}
 
 				// Notify formatter of completion
@@ -173,7 +178,6 @@ func (w *Worker) Execute(ctx context.Context, operations []models.FileOperation,
 					})
 				}
 			}
-			mu.Unlock()
 
 			if err != nil {
 				errChan <- err

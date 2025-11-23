@@ -103,11 +103,11 @@ func (e *Engine) Run(ctx context.Context) (*models.SyncReport, error) {
 		}
 	}
 
-	// Store source and destination counts separately
-	report.Stats.SourceFilesScanned = sourceFileCount
-	report.Stats.SourceDirsScanned = sourceDirCount
-	report.Stats.DestFilesScanned = destFileCount
-	report.Stats.DestDirsScanned = destDirCount
+	// Store source and destination counts separately (using atomic Store)
+	report.Stats.SourceFilesScanned.Store(int32(sourceFileCount))
+	report.Stats.SourceDirsScanned.Store(int32(sourceDirCount))
+	report.Stats.DestFilesScanned.Store(int32(destFileCount))
+	report.Stats.DestDirsScanned.Store(int32(destDirCount))
 
 	// Count unique paths for total scanned
 	uniqueFilePaths := make(map[string]bool)
@@ -129,8 +129,8 @@ func (e *Engine) Run(ctx context.Context) (*models.SyncReport, error) {
 		}
 	}
 
-	report.Stats.FilesScanned = len(uniqueFilePaths)
-	report.Stats.DirsScanned = len(uniqueDirPaths)
+	report.Stats.FilesScanned.Store(int32(len(uniqueFilePaths)))
+	report.Stats.DirsScanned.Store(int32(len(uniqueDirPaths)))
 
 	// Phase 2: Compare files
 	if e.logger != nil {
@@ -177,7 +177,7 @@ func (e *Engine) Run(ctx context.Context) (*models.SyncReport, error) {
 		if e.logger != nil {
 			e.logger.Info(ctx, "Dry-run mode: skipping execution", nil)
 		}
-		report.Stats.FilesSkipped = len(operations)
+		report.Stats.FilesSkipped.Store(int32(len(operations)))
 	} else {
 		// Don't reinitialize the formatter - keep the comparison phase counters
 		// Synchronized files will be counted as they are processed
@@ -214,7 +214,7 @@ func (e *Engine) Run(ctx context.Context) (*models.SyncReport, error) {
 	report.Duration = report.EndTime.Sub(report.StartTime)
 
 	if len(report.Errors) > 0 {
-		if report.Stats.FilesErrored == len(operations) {
+		if int(report.Stats.FilesErrored.Load()) == len(operations) {
 			report.Status = models.StatusFailed
 		} else {
 			report.Status = models.StatusPartial
@@ -223,13 +223,13 @@ func (e *Engine) Run(ctx context.Context) (*models.SyncReport, error) {
 
 	if e.logger != nil {
 		e.logger.Info(ctx, "Sync operation completed", logging.Fields{
-			"duration":       report.Duration.String(),
-			"status":         report.Status,
-			"files_copied":   report.Stats.FilesCopied,
-			"files_updated":  report.Stats.FilesUpdated,
-			"files_skipped":  report.Stats.FilesSkipped,
-			"files_errored":  report.Stats.FilesErrored,
-			"bytes_transferred": report.Stats.BytesTransferred,
+			"duration":           report.Duration.String(),
+			"status":             report.Status,
+			"files_copied":       report.Stats.FilesCopied.Load(),
+			"files_updated":      report.Stats.FilesUpdated.Load(),
+			"files_skipped":      report.Stats.FilesSkipped.Load(),
+			"files_errored":      report.Stats.FilesErrored.Load(),
+			"bytes_transferred":  report.Stats.BytesTransferred.Load(),
 		})
 	}
 
