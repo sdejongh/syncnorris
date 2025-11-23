@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -14,9 +15,26 @@ import (
 )
 
 const (
-	maxDisplayFiles = 5 // Maximum number of files to display simultaneously
-	speedWindow     = 3 * time.Second // Window for instantaneous speed calculation
+	speedWindow = 3 * time.Second // Window for instantaneous speed calculation
 )
+
+// getMaxDisplayFiles returns maximum number of files to show based on OS
+// Windows benefits from fewer lines to reduce flicker
+func getMaxDisplayFiles() int {
+	if runtime.GOOS == "windows" {
+		return 3 // Show fewer files on Windows to minimize screen updates
+	}
+	return 5 // Show more files on Unix systems
+}
+
+// getUpdateInterval returns the progress update interval based on OS
+// Windows terminals have higher latency with ANSI sequences, so we use a longer interval
+func getUpdateInterval() time.Duration {
+	if runtime.GOOS == "windows" {
+		return 300 * time.Millisecond // Slower updates on Windows to reduce flicker
+	}
+	return 100 * time.Millisecond // Faster updates on Unix systems
+}
 
 // fileProgress tracks progress of an individual file
 type fileProgress struct {
@@ -185,8 +203,9 @@ func (f *ProgressFormatter) Progress(update ProgressUpdate) error {
 	}
 
 	// Update display if enough time has passed (avoid flickering)
+	// Use platform-specific interval (Windows needs longer intervals)
 	now := time.Now()
-	if now.Sub(f.lastDisplay) > 100*time.Millisecond {
+	if now.Sub(f.lastDisplay) > getUpdateInterval() {
 		f.render()
 		f.lastDisplay = now
 	}
@@ -252,7 +271,10 @@ func (f *ProgressFormatter) renderContent() {
 	// Build all content in memory to reduce flicker (especially on Windows)
 	var content strings.Builder
 
-	// Show active files (up to maxDisplayFiles), sorted alphabetically
+	// Show active files, sorted alphabetically
+	// Platform-specific: Windows shows fewer files to reduce flicker
+	maxFiles := getMaxDisplayFiles()
+
 	// First, collect and sort the active files
 	type indexedFile struct {
 		index int
@@ -281,7 +303,7 @@ func (f *ProgressFormatter) renderContent() {
 
 	count := 0
 	for _, item := range sortedFiles {
-		if count >= maxDisplayFiles {
+		if count >= maxFiles {
 			break
 		}
 
