@@ -120,11 +120,10 @@ func runCompare(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("comparison failed: %w", err)
 	}
 
-	// Write differences report if requested
-	if syncFlags.DiffReport != "" {
-		if err := output.WriteDifferencesReport(report, syncFlags.DiffReport, syncFlags.DiffFormat); err != nil {
-			return fmt.Errorf("failed to write differences report: %w", err)
-		}
+	// Always write differences report for compare command
+	// If no file specified, write to stdout
+	if err := output.WriteDifferencesReport(report, syncFlags.DiffReport, syncFlags.DiffFormat); err != nil {
+		return fmt.Errorf("failed to write differences report: %w", err)
 	}
 
 	// Exit with appropriate code

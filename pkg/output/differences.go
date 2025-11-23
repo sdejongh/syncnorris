@@ -11,26 +11,56 @@ import (
 	"github.com/sdejongh/syncnorris/pkg/models"
 )
 
-// WriteDifferencesReport writes the differences report to a file
+// WriteDifferencesReport writes the differences report to a file or stdout
+// If filepath is empty, writes to stdout
 // Format can be "human" or "json"
 func WriteDifferencesReport(report *models.SyncReport, filepath string, format string) error {
-	if len(report.Differences) == 0 {
-		// No differences - don't create empty file
-		return nil
+	var w io.Writer
+	var shouldClose bool
+
+	if filepath == "" {
+		// Write to stdout
+		w = os.Stdout
+		shouldClose = false
+
+		// Always display something to stdout, even if no differences
+		if len(report.Differences) == 0 {
+			fmt.Fprintln(w, "\nNo differences found - directories are synchronized.")
+			return nil
+		}
+
+		// Add blank line before report for better readability
+		fmt.Fprintln(w)
+	} else {
+		// Write to file
+		if len(report.Differences) == 0 {
+			// No differences - don't create empty file
+			return nil
+		}
+
+		file, err := os.Create(filepath)
+		if err != nil {
+			return fmt.Errorf("failed to create differences file: %w", err)
+		}
+		defer file.Close()
+		w = file
+		shouldClose = true
 	}
 
-	file, err := os.Create(filepath)
-	if err != nil {
-		return fmt.Errorf("failed to create differences file: %w", err)
-	}
-	defer file.Close()
-
+	// Write the report
+	var err error
 	switch format {
 	case "json":
-		return writeDifferencesJSON(report, file)
+		err = writeDifferencesJSON(report, w)
 	default: // "human"
-		return writeDifferencesHuman(report, file)
+		err = writeDifferencesHuman(report, w)
 	}
+
+	if err != nil && shouldClose {
+		return err
+	}
+
+	return err
 }
 
 // writeDifferencesHuman writes differences in human-readable format
