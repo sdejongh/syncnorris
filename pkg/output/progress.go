@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -201,22 +202,27 @@ func (f *ProgressFormatter) render() {
 
 	// Save cursor position on first render, then restore it on subsequent renders
 	if f.displayLines == 0 {
-		// First render - just display
+		// First render - hide cursor to prevent flicker (especially on Windows)
+		fmt.Fprint(f.writer, "\033[?25l") // Hide cursor
 		f.renderContent()
 		return
 	}
 
 	// Subsequent renders - move up and clear each line individually
 	// Build all escape sequences into a single string to avoid buffering issues
-	var escapeSeq string
+	var escapeSeq strings.Builder
+
+	// Hide cursor to reduce flicker (especially important on Windows)
+	escapeSeq.WriteString("\033[?25l")
+
 	for i := 0; i < f.displayLines; i++ {
-		escapeSeq += "\033[1A" // Move up one line
-		escapeSeq += "\033[2K" // Clear entire line
+		escapeSeq.WriteString("\033[1A") // Move up one line
+		escapeSeq.WriteString("\033[2K") // Clear entire line
 	}
-	escapeSeq += "\r" // Move cursor to beginning of line
+	escapeSeq.WriteString("\r") // Move cursor to beginning of line
 
 	// Write all escape sequences at once
-	fmt.Fprint(f.writer, escapeSeq)
+	fmt.Fprint(f.writer, escapeSeq.String())
 
 	// Flush if the writer supports it to ensure ANSI codes are executed
 	// before we write new content
@@ -243,6 +249,9 @@ func (f *ProgressFormatter) truncateLine(line string) string {
 func (f *ProgressFormatter) renderContent() {
 	lines := 0
 
+	// Build all content in memory to reduce flicker (especially on Windows)
+	var content strings.Builder
+
 	// Show active files (up to maxDisplayFiles), sorted alphabetically
 	// First, collect and sort the active files
 	type indexedFile struct {
@@ -265,8 +274,8 @@ func (f *ProgressFormatter) renderContent() {
 			"", "File", "Progress", "Copied", "Total")
 		header2 := fmt.Sprintf("%-3s  %-50s  %8s  %12s  %12s",
 			"", "────────────────────────────────────────────────", "────────", "────────────", "────────────")
-		fmt.Fprintf(f.writer, "%s\n", f.truncateLine(header1))
-		fmt.Fprintf(f.writer, "%s\n", f.truncateLine(header2))
+		content.WriteString(f.truncateLine(header1) + "\n")
+		content.WriteString(f.truncateLine(header2) + "\n")
 		lines += 2
 	}
 
@@ -309,14 +318,14 @@ func (f *ProgressFormatter) renderContent() {
 			formatBytes(fp.current),
 			formatBytes(fp.total),
 		)
-		fmt.Fprintf(f.writer, "%s\n", f.truncateLine(fileLine))
+		content.WriteString(f.truncateLine(fileLine) + "\n")
 		lines++
 		count++
 	}
 
 	// Add separator if there are active files
 	if count > 0 {
-		fmt.Fprintf(f.writer, "\n")
+		content.WriteString("\n")
 		lines++
 	}
 
@@ -421,7 +430,7 @@ func (f *ProgressFormatter) renderContent() {
 		dataLine += fmt.Sprintf(" ETA: %s", eta)
 	}
 
-	fmt.Fprintf(f.writer, "%s\n", f.truncateLine(dataLine))
+	content.WriteString(f.truncateLine(dataLine) + "\n")
 	lines++
 
 	// Second progress bar: Files processed
@@ -450,10 +459,13 @@ func (f *ProgressFormatter) renderContent() {
 		f.processedFiles,
 		f.totalFiles,
 	)
-	fmt.Fprintf(f.writer, "%s\n", f.truncateLine(filesLine))
+	content.WriteString(f.truncateLine(filesLine) + "\n")
 	lines++
 
 	f.displayLines = lines
+
+	// Write all content at once to minimize flicker
+	fmt.Fprint(f.writer, content.String())
 }
 
 // Complete finalizes output and displays summary
@@ -473,6 +485,9 @@ func (f *ProgressFormatter) Complete(report *models.SyncReport) error {
 	f.mu.Lock()
 	f.render()
 	f.mu.Unlock()
+
+	// Show cursor again (was hidden to prevent flicker)
+	fmt.Fprint(f.writer, "\033[?25h")
 
 	// Move past the progress display
 	fmt.Fprintf(f.writer, "\n")
