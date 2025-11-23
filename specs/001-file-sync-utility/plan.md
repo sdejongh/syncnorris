@@ -35,6 +35,10 @@ syncnorris is a cross-platform file synchronization utility that enables one-way
 - Parallel hash computation 1.8-1.9x speedup (SC-015) ✅
 - Atomic statistics 8.6x faster updates (SC-016) ✅
 - Terminal width adaptation for all display sizes (SC-017) ✅
+- MD5 comparison performance comparable to SHA-256 (SC-018) ✅
+- Binary comparison efficient for identical files (SC-019) ✅
+- Exact byte offset reporting in binary mode (SC-020) ✅
+- Four comparison methods fully functional (SC-021) ✅
 
 **Constraints**:
 - Single static binary with no external dependencies (CGO_ENABLED=0)
@@ -185,10 +189,12 @@ syncnorris/
 │   │   └── unc.go               # Windows UNC paths
 │   ├── compare/
 │   │   ├── comparator.go        # Comparison interface
-│   │   ├── namesize.go          # Name/size comparison
-│   │   ├── timestamp.go         # Modification time comparison
-│   │   ├── binary.go            # Byte-by-byte comparison
-│   │   └── hash.go              # SHA-256 hash comparison
+│   │   ├── composite.go         # ✅ Composite strategy (metadata+hash)
+│   │   ├── namesize.go          # ✅ Name/size comparison (implemented)
+│   │   ├── hash.go              # ✅ SHA-256 hash comparison (implemented)
+│   │   ├── md5.go               # ✅ MD5 hash comparison (implemented 2025-11-23)
+│   │   ├── binary.go            # ✅ Byte-by-byte comparison (implemented 2025-11-23)
+│   │   └── timestamp.go         # Modification time comparison (planned)
 │   ├── sync/
 │   │   ├── engine.go            # Core sync orchestration
 │   │   ├── oneway.go            # One-way synchronization
