@@ -146,7 +146,10 @@ func runSync(cmd *cobra.Command, args []string) error {
 	}
 
 	// Write differences report if requested
-	if syncFlags.DiffReport != "" {
+	// Show report if:
+	// - --diff-report is specified (write to file)
+	// - --diff-format is explicitly set (write to stdout)
+	if syncFlags.DiffReport != "" || cmd.Flags().Changed("diff-format") {
 		if err := output.WriteDifferencesReport(report, syncFlags.DiffReport, syncFlags.DiffFormat); err != nil {
 			return fmt.Errorf("failed to write differences report: %w", err)
 		}
