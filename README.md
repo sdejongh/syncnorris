@@ -92,26 +92,71 @@ See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for detailed feature st
 
 ## Installation
 
+### Quick Install (Recommended)
+
+**Linux & macOS:**
+```bash
+curl -sSL https://raw.githubusercontent.com/sdejongh/syncnorris/master/install.sh | bash
+```
+
+Or with wget:
+```bash
+wget -qO- https://raw.githubusercontent.com/sdejongh/syncnorris/master/install.sh | bash
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/sdejongh/syncnorris/master/install.ps1 | iex
+```
+
+Or download and run:
+```powershell
+# Download the script
+Invoke-WebRequest -Uri https://raw.githubusercontent.com/sdejongh/syncnorris/master/install.ps1 -OutFile install.ps1
+
+# Run it
+powershell -ExecutionPolicy Bypass -File install.ps1
+```
+
+The installer will automatically:
+- Detect your OS and architecture
+- Download the latest release
+- Install the binary to the appropriate location
+- Add it to your PATH
+
+### Manual Download
+
+Download the latest release for your platform from the [Releases page](https://github.com/sdejongh/syncnorris/releases):
+
+1. Download the archive for your platform:
+   - **Linux**: `syncnorris_VERSION_Linux_x86_64.tar.gz` or `syncnorris_VERSION_Linux_arm64.tar.gz`
+   - **macOS**: `syncnorris_VERSION_Darwin_x86_64.tar.gz` or `syncnorris_VERSION_Darwin_arm64.tar.gz`
+   - **Windows**: `syncnorris_VERSION_Windows_x86_64.zip`
+
+2. Extract the archive
+3. Move the binary to a directory in your PATH:
+   - **Linux/macOS**: `sudo mv syncnorris /usr/local/bin/`
+   - **Windows**: Move `syncnorris.exe` to `C:\Program Files\syncnorris\` and add to PATH
+
+### Using Go
+
+If you have Go installed:
+
+```bash
+go install github.com/sdejongh/syncnorris/cmd/syncnorris@latest
+```
+
 ### From Source
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/syncnorris.git
+git clone https://github.com/sdejongh/syncnorris.git
 cd syncnorris
 
 # Build
 make build
 
 # The binary will be in dist/syncnorris
-```
-
-### Cross-Platform Builds
-
-```bash
-# Build for all platforms
-make build-all
-
-# Binaries will be in dist/ with platform suffixes
 ```
 
 ## Quick Start
