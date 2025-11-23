@@ -75,7 +75,9 @@ get_latest_version() {
 
 # Download and extract archive
 download_and_extract() {
-    local archive_name="${BINARY_NAME}_${VERSION}_${OS}_${ARCH}.tar.gz"
+    # Remove 'v' prefix from version for filename (GoReleaser uses version without 'v')
+    local version_number="${VERSION#v}"
+    local archive_name="${BINARY_NAME}_${version_number}_${OS}_${ARCH}.tar.gz"
     local download_url="https://github.com/${REPO}/releases/download/${VERSION}/${archive_name}"
     local tmp_dir=$(mktemp -d)
 

@@ -61,7 +61,9 @@ function Install-Syncnorris {
         [string]$Arch
     )
 
-    $archiveName = "syncnorris_${Version}_Windows_${Arch}.zip"
+    # Remove 'v' prefix from version for filename (GoReleaser uses version without 'v')
+    $versionNumber = $Version -replace '^v', ''
+    $archiveName = "syncnorris_${versionNumber}_Windows_${Arch}.zip"
     $downloadUrl = "https://github.com/$Repo/releases/download/$Version/$archiveName"
     $tempDir = [System.IO.Path]::GetTempPath()
     $archivePath = Join-Path $tempDir $archiveName
