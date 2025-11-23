@@ -1,0 +1,136 @@
+package cli
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
+	"github.com/sdejongh/syncnorris/pkg/compare"
+	"github.com/sdejongh/syncnorris/pkg/models"
+	"github.com/sdejongh/syncnorris/pkg/output"
+	"github.com/sdejongh/syncnorris/pkg/storage"
+	"github.com/sdejongh/syncnorris/pkg/sync"
+)
+
+// SyncFlags holds sync command flags
+type SyncFlags struct {
+	Source      string
+	Dest        string
+	Mode        string
+	Comparison  string
+	Conflict    string
+	DryRun      bool
+	Parallel    int
+	Bandwidth   string
+	Exclude     []string
+	Output      string
+}
+
+var syncFlags SyncFlags
+
+// NewSyncCommand creates the sync command
+func NewSyncCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "sync",
+		Short: "Synchronize two folders",
+		Long: `Synchronize files between source and destination directories.
+Supports one-way and bidirectional sync with multiple comparison methods.`,
+		RunE: runSync,
+	}
+
+	// Required flags
+	cmd.Flags().StringVarP(&syncFlags.Source, "source", "s", "", "source directory path (required)")
+	cmd.Flags().StringVarP(&syncFlags.Dest, "dest", "d", "", "destination directory path (required)")
+	cmd.MarkFlagRequired("source")
+	cmd.MarkFlagRequired("dest")
+
+	// Optional flags
+	cmd.Flags().StringVarP(&syncFlags.Mode, "mode", "m", "oneway", "sync mode: oneway, bidirectional")
+	cmd.Flags().StringVar(&syncFlags.Comparison, "comparison", "hash", "comparison method: namesize, timestamp, binary, hash")
+	cmd.Flags().StringVar(&syncFlags.Conflict, "conflict", "ask", "conflict resolution: ask, source-wins, dest-wins, newer, both")
+	cmd.Flags().BoolVar(&syncFlags.DryRun, "dry-run", false, "compare only, don't sync")
+	cmd.Flags().IntVarP(&syncFlags.Parallel, "parallel", "p", 0, "number of parallel workers (default: CPU count)")
+	cmd.Flags().StringVarP(&syncFlags.Bandwidth, "bandwidth", "b", "", "bandwidth limit (e.g., \"10M\", \"1G\")")
+	cmd.Flags().StringSliceVar(&syncFlags.Exclude, "exclude", []string{}, "glob patterns to exclude")
+	cmd.Flags().StringVarP(&syncFlags.Output, "output", "o", "human", "output format: human, json")
+
+	return cmd
+}
+
+func runSync(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	// Validate flags
+	if err := validateSyncFlags(); err != nil {
+		return err
+	}
+
+	// Load configuration
+	cfg, err := loadConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Override config with command-line flags
+	applyFlagsToConfig(cfg)
+
+	// Create sync operation
+	operation, err := createSyncOperation(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create sync operation: %w", err)
+	}
+
+	// Create storage backends
+	source, err := storage.NewLocal(syncFlags.Source)
+	if err != nil {
+		return fmt.Errorf("failed to create source backend: %w", err)
+	}
+	defer source.Close()
+
+	dest, err := storage.NewLocal(syncFlags.Dest)
+	if err != nil {
+		return fmt.Errorf("failed to create destination backend: %w", err)
+	}
+	defer dest.Close()
+
+	// Create comparator
+	// Use composite comparator for intelligent comparison strategy:
+	// - Always check name+size first (fast)
+	// - Only hash if requested AND name+size match
+	var comparator compare.Comparator
+	switch operation.ComparisonMethod {
+	case models.CompareNameSize:
+		// Fast: name+size only, no hash verification
+		comparator = compare.NewCompositeComparator(false, cfg.Performance.BufferSize)
+	case models.CompareHash:
+		// Secure: name+size first, then hash if needed
+		comparator = compare.NewCompositeComparator(true, cfg.Performance.BufferSize)
+	default:
+		return fmt.Errorf("unsupported comparison method: %s", operation.ComparisonMethod)
+	}
+
+	// Create output formatter
+	var formatter output.Formatter
+	if cfg.Output.Progress {
+		formatter = output.NewProgressFormatter()
+	} else {
+		formatter = output.NewHumanFormatter()
+	}
+
+	// Create sync engine (logger is nil for now)
+	engine := sync.NewEngine(source, dest, comparator, formatter, nil, operation)
+
+	// Run sync
+	report, err := engine.Run(ctx)
+	if err != nil {
+		return fmt.Errorf("sync failed: %w", err)
+	}
+
+	// Exit with appropriate code
+	os.Exit(report.Status.ExitCode())
+	return nil
+}

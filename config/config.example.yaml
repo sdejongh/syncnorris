@@ -1,0 +1,28 @@
+# syncnorris configuration example
+
+sync:
+  mode: oneway              # oneway | bidirectional
+  comparison: hash          # namesize | timestamp | binary | hash
+  conflict_resolution: ask  # ask | source-wins | dest-wins | newer | both
+
+performance:
+  max_workers: 8            # Parallel file operations (0 = CPU count)
+  buffer_size: 65536        # 64KB chunks for file I/O
+  bandwidth_limit: 0        # Bytes/sec (0 = unlimited)
+
+output:
+  format: human             # human | json
+  progress: true            # Show progress bars
+  quiet: false              # Suppress non-error output
+
+logging:
+  enabled: true
+  format: json              # json | text | xml
+  level: info               # debug | info | warn | error
+  file: ""                  # Empty = stderr only
+
+exclude:
+  - "*.tmp"
+  - ".git/"
+  - "node_modules/"
+  - ".DS_Store"

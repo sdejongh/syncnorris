@@ -1,0 +1,48 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go build artifacts
+/dist/
+/bin/
+/build/
+vendor/
+
+# Go test coverage
+*.coverprofile
+coverage.out
+coverage.html
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Environment and config files
+.env
+.env.*
+!.env.example
+*.local
+
+# Logs
+*.log
+logs/
+
+# syncnorris specific
+.syncnorris/
+config/*.yaml
+!config/config.example.yaml
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
