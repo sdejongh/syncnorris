@@ -76,10 +76,10 @@ func NewWorker(source, dest storage.Backend, maxWorkers int) *Worker {
 }
 
 // Execute processes file operations in parallel
+// Continues processing all files even if some fail - errors are recorded in the report
 func (w *Worker) Execute(ctx context.Context, operations []models.FileOperation, report *models.SyncReport, formatter output.Formatter) error {
 	var wg sync.WaitGroup
 	var errorsMu sync.Mutex // Only for appending to report.Errors slice
-	errChan := make(chan error, len(operations))
 
 	currentFile := 0
 
@@ -179,25 +179,18 @@ func (w *Worker) Execute(ctx context.Context, operations []models.FileOperation,
 				}
 			}
 
-			if err != nil {
-				errChan <- err
-			}
+			// Note: errors are already recorded in the report, no need to stop
+			// Continue processing remaining files even if this one failed
 		}(op, fileNum)
 	}
 
 	// Wait for all workers to complete
 	wg.Wait()
-	close(errChan)
 
-	// Check for errors
-	var firstErr error
-	for err := range errChan {
-		if firstErr == nil {
-			firstErr = err
-		}
-	}
-
-	return firstErr
+	// Don't return first error - let all files be processed
+	// The report will contain all errors and the final status will be determined
+	// based on whether any errors occurred
+	return nil
 }
 
 // copyFile copies a single file from source to destination with progress reporting

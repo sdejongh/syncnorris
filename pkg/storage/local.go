@@ -34,13 +34,21 @@ func NewLocal(rootPath string) (*Local, error) {
 }
 
 // List returns all files in the directory recursively
+// Continues on permission errors, skipping inaccessible files/directories
 func (l *Local) List(ctx context.Context, path string) ([]FileInfo, error) {
 	fullPath := filepath.Join(l.rootPath, path)
 	var files []FileInfo
 
 	err := filepath.WalkDir(fullPath, func(p string, d fs.DirEntry, err error) error {
+		// Handle permission denied and other errors during directory traversal
 		if err != nil {
-			return err
+			// Skip inaccessible directories/files rather than aborting
+			// The file/directory will be missing from the list, which will be
+			// handled at the sync level as appropriate
+			if d != nil && d.IsDir() {
+				return fs.SkipDir // Skip this directory and continue
+			}
+			return nil // Skip this file and continue
 		}
 
 		// Check context cancellation
@@ -52,12 +60,15 @@ func (l *Local) List(ctx context.Context, path string) ([]FileInfo, error) {
 
 		relPath, err := filepath.Rel(l.rootPath, p)
 		if err != nil {
-			return err
+			// Should not happen in normal circumstances, but skip this entry
+			return nil
 		}
 
 		info, err := d.Info()
 		if err != nil {
-			return err
+			// Cannot get file info - skip this entry
+			// This can happen with permission issues on the file itself
+			return nil
 		}
 
 		files = append(files, FileInfo{
