@@ -3,7 +3,7 @@
 **Feature Branch**: `001-file-sync-utility`
 **Created**: 2025-11-22
 **Last Updated**: 2025-11-23
-**Status**: In Progress - Compare Command Implemented
+**Status**: In Progress - Differences Reporting & Error Handling Implemented
 **Input**: User description: "Je veux créer un utilitaire de synchronisation de fichiers entr edossiers locaux opu travers le réseaux ou encore entre montage locaux multi-plateforme capable de synchroniser deux dossiers de manieère unidirectionnelle ou bi directionnelle mais aussi de comparer deux dossiers autant d'un point de vue nom de fichier et de taille mais aussi sur base d'une comparaison binaire ou une comparaison de hashage. Cet utilitaire doit fonctionner en ligne de commande, proposer une interface claire et moderne et proposer une sortie humainement lisible et agréable tout autant qu'une sortie plus technique au format json."
 
 ## Implementation Progress
@@ -161,6 +161,76 @@
       Files synchronized: 1  (identical)
       Files skipped:      0  (none excluded)
     ```
+
+#### Differences Reporting (2025-11-23)
+- ✅ **Dual Format Differences Reports**: Optional reports listing files remaining different
+  - **Human-readable format** (default): Grouped by difference reason with metadata
+    - Section headings: Copy Errors, Update Errors, Only in Source, Only in Destination, Hash Differences, etc.
+    - File details: size, modification time, partial hash
+    - Clean text output with proper separators
+  - **JSON format**: Structured data for automation and scripting
+    - Full metadata for each difference
+    - Machine-readable for future processing
+    - Can be fed back to tool for targeted re-sync
+
+- ✅ **Compare Command Behavior**: Always displays differences to stdout
+  - Default: Human-readable format to screen
+  - `--diff-format json`: JSON format to screen
+  - `--diff-report FILE`: Save to file instead of displaying
+  - Shows "No differences found" when fully synchronized
+
+- ✅ **Sync Command Behavior**: Optional differences reporting
+  - Default: No report displayed
+  - `--diff-format human|json`: Display report to screen
+  - `--diff-report FILE`: Save report to file
+  - Report only created if differences remain after sync
+
+- ✅ **Difference Categories**: Eight distinct reasons tracked
+  - `copy_error`: File copy failed (e.g., permission denied on source)
+  - `update_error`: File update failed (e.g., permission denied on destination)
+  - `hash_different`: Files have different content (dry-run mode)
+  - `content_different`: Binary comparison detected difference
+  - `size_different`: Files have different sizes
+  - `only_in_source`: File exists only in source (not yet copied)
+  - `only_in_dest`: File exists only in destination (one-way mode)
+  - `skipped`: File intentionally skipped (future: exclude patterns)
+
+- ✅ **Smart Report Generation**:
+  - No report file created if all files synchronized successfully
+  - Errors during sync/compare automatically included in differences
+  - Dry-run mode shows what would be synchronized
+  - Reports integrate with overall sync status (success/partial/failed)
+
+#### Robust Error Handling (2025-11-23)
+- ✅ **Resilient Directory Listing**: Continues despite permission errors
+  - `List()` function skips inaccessible files/directories instead of aborting
+  - Uses `fs.SkipDir` for unreadable directories
+  - Individual file permission errors don't halt directory traversal
+  - Missing files simply don't appear in operations list
+
+- ✅ **Continue-on-Error Sync**: Processes all accessible files despite failures
+  - Worker pool continues processing remaining files when one fails
+  - Each error recorded individually in report.Errors
+  - Statistics updated correctly for both successes and failures
+  - Final status reflects partial success (StatusPartial) vs total failure
+
+- ✅ **Correct Error Categorization**: Clear distinction between file states
+  - **Synchronized**: Files identical on both sides (successfully verified)
+  - **Errored**: Files with actual errors (permission denied, I/O error, comparison failed)
+    - Counted in "Files errored" statistic
+    - Full error details recorded and displayed
+    - Included in differences report with error reason
+  - **Skipped**: Files intentionally excluded per user settings
+    - Currently: dest-only files in one-way mode
+    - Future: files matching exclude patterns
+    - Counted in "Files skipped" statistic
+
+- ✅ **Error Reporting & Recovery**:
+  - All errors displayed with file path and specific error message
+  - Errors appear in both summary statistics and detailed error list
+  - Differences report shows errored files with full context
+  - Exit codes reflect overall operation status (0=success, 1=partial, 2=failed)
+  - Example: 10 files, 8 successful, 2 permission denied → Status: partial, Exit code: 1
 
 ## User Scenarios & Testing *(mandatory)*
 

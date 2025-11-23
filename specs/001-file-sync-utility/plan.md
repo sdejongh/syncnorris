@@ -39,6 +39,9 @@ syncnorris is a cross-platform file synchronization utility that enables one-way
 - Binary comparison efficient for identical files (SC-019) ✅
 - Exact byte offset reporting in binary mode (SC-020) ✅
 - Four comparison methods fully functional (SC-021) ✅
+- Differences reporting in human/JSON formats (SC-022) ✅
+- Resilient error handling with continue-on-error (SC-023) ✅
+- Proper skipped/errored/synchronized categorization (SC-024) ✅
 
 **Constraints**:
 - Single static binary with no external dependencies (CGO_ENABLED=0)
@@ -205,7 +208,8 @@ syncnorris/
 │   │   ├── formatter.go         # Output interface
 │   │   ├── human.go             # Human-readable output
 │   │   ├── json.go              # JSON output
-│   │   └── progress.go          # Progress bar rendering
+│   │   ├── progress.go          # ✅ Progress bar rendering (implemented)
+│   │   └── differences.go       # ✅ Differences report (human/JSON) (implemented 2025-11-23)
 │   ├── logging/
 │   │   ├── logger.go            # Logging interface
 │   │   ├── jsonlog.go           # JSON log format
@@ -360,6 +364,118 @@ No constitutional violations detected. This section is empty as all gates passed
 - quickstart.md Makefile includes lint target
 
 **Status**: Compliant - workflow aligns with constitutional requirements
+
+## Recent Implementation Enhancements (2025-11-23)
+
+### Differences Reporting System
+
+**Implementation**: Full differences reporting capability added to both sync and compare commands
+
+**New Data Structures** (pkg/models/report.go):
+```go
+// FileDifference represents a file that remains different after sync/compare
+type FileDifference struct {
+    RelativePath string           `json:"relative_path"`
+    Reason       DifferenceReason `json:"reason"`
+    Details      string           `json:"details,omitempty"`
+    SourceInfo   *FileInfo        `json:"source_info,omitempty"`
+    DestInfo     *FileInfo        `json:"dest_info,omitempty"`
+}
+
+// DifferenceReason indicates why files remain different
+type DifferenceReason string
+const (
+    ReasonCopyError    DifferenceReason = "copy_error"
+    ReasonUpdateError  DifferenceReason = "update_error"
+    ReasonHashDiff     DifferenceReason = "hash_different"
+    ReasonContentDiff  DifferenceReason = "content_different"
+    ReasonSizeDiff     DifferenceReason = "size_different"
+    ReasonOnlyInSource DifferenceReason = "only_in_source"
+    ReasonOnlyInDest   DifferenceReason = "only_in_dest"
+    ReasonSkipped      DifferenceReason = "skipped"
+)
+```
+
+**New Output Module** (pkg/output/differences.go):
+- `WriteDifferencesReport()`: Main entry point, writes to file or stdout
+- `writeDifferencesHuman()`: Groups differences by reason, clean text formatting
+- `writeDifferencesJSON()`: Structured JSON for automation
+
+**CLI Integration**:
+- Compare command: Always displays differences to stdout (human or JSON)
+- Sync command: Optional with `--diff-format` or `--diff-report FILE`
+- `--diff-format human|json`: Format selection
+- `--diff-report FILE`: Output destination (empty = stdout)
+
+**Features**:
+- No file created if everything synchronized
+- Errors automatically included in differences
+- Dry-run mode shows what would change
+- JSON suitable for feeding back to tool for targeted re-sync
+
+### Robust Error Handling
+
+**Problem Solved**: Permission errors and I/O failures were causing complete sync abortion
+
+**Solution Implemented**:
+
+1. **Resilient Directory Listing** (pkg/storage/local.go):
+   - Modified `List()` to continue despite permission errors
+   - Uses `fs.SkipDir` for unreadable directories
+   - Skips individual inaccessible files
+   - Errors don't abort directory traversal
+
+2. **Continue-on-Error Worker** (pkg/sync/worker.go):
+   - Removed early exit on first error
+   - All files processed regardless of individual failures
+   - Each error recorded in report.Errors
+   - Final status: StatusPartial if some succeed, StatusFailed if all fail
+
+3. **Correct File Categorization** (pkg/sync/engine.go, pkg/sync/worker.go):
+   - **Synchronized**: Identical files (`op.Reason == "files are identical"`)
+   - **Errored**: Files with errors (`op.Error != nil`)
+     - Permission denied, I/O error, comparison failed
+     - Counted in FilesErrored statistic
+     - Included in differences report
+   - **Skipped**: Intentionally excluded per user settings
+     - Currently: dest-only files in one-way mode
+     - Future: files matching exclude patterns
+     - Counted in FilesSkipped statistic
+
+**Impact**:
+- Sync no longer aborts on permission errors
+- Users get complete report of what succeeded/failed
+- Proper exit codes: 0 (success), 1 (partial), 2 (failed), 3 (cancelled)
+- Clear error messages for each failed file
+
+### Lessons Learned
+
+**Key Insights from Implementation**:
+
+1. **User expectations differ by command**:
+   - `compare`: Users expect to see differences immediately → always show report
+   - `sync`: Users expect quiet operation → report only when requested
+   - Solution: Different default behaviors, consistent flags
+
+2. **Error categories matter**:
+   - Initially all non-identical files counted as "skipped"
+   - Users couldn't distinguish real errors from intentional exclusions
+   - Solution: Three distinct categories (synchronized/errored/skipped)
+
+3. **Resilience is critical**:
+   - Permission errors are common in real-world scenarios
+   - Users expect sync to do as much as possible, not fail completely
+   - Solution: Continue-on-error with detailed reporting
+
+4. **Text output must be valid text**:
+   - Initial human format used null characters for separators
+   - Files detected as binary by `file` command
+   - Solution: Use proper ASCII characters (dashes for separators)
+
+5. **Integration testing reveals UX issues**:
+   - Theoretical design doesn't capture all user workflows
+   - Testing with realistic scenarios exposed categorization problems
+   - Solution: Iterative refinement based on actual usage patterns
 
 ## Overall Post-Design Gate Status: ✅ PASS
 
