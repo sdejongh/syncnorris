@@ -177,7 +177,20 @@ func (e *Engine) Run(ctx context.Context) (*models.SyncReport, error) {
 		if e.logger != nil {
 			e.logger.Info(ctx, "Dry-run mode: skipping execution", nil)
 		}
-		report.Stats.FilesSkipped.Store(int32(len(operations)))
+
+		// Count operations by action type for dry-run report
+		for _, op := range operations {
+			switch op.Action {
+			case models.ActionCopy:
+				report.Stats.FilesCopied.Add(1)
+			case models.ActionUpdate:
+				report.Stats.FilesUpdated.Add(1)
+			case models.ActionSkip:
+				report.Stats.FilesSkipped.Add(1)
+			case models.ActionDelete:
+				// File deletions would be counted here in bidirectional mode
+			}
+		}
 
 		// Display comparison results in dry-run mode
 		if e.formatter != nil {
