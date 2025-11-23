@@ -1,6 +1,4 @@
 # Configuration GoReleaser pour syncnorris
-version: 2
-
 before:
   hooks:
     # Vérifier que les dépendances sont à jour
