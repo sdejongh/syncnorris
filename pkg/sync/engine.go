@@ -179,6 +179,7 @@ func (e *Engine) Run(ctx context.Context) (*models.SyncReport, error) {
 		}
 
 		// Count operations by action type for dry-run report
+		// Use the same logic as worker.go to distinguish synchronized vs skipped
 		for _, op := range operations {
 			switch op.Action {
 			case models.ActionCopy:
@@ -186,7 +187,12 @@ func (e *Engine) Run(ctx context.Context) (*models.SyncReport, error) {
 			case models.ActionUpdate:
 				report.Stats.FilesUpdated.Add(1)
 			case models.ActionSkip:
-				report.Stats.FilesSkipped.Add(1)
+				// Distinguish between synchronized (identical) and skipped (excluded/other)
+				if op.Reason == "files are identical" {
+					report.Stats.FilesSynchronized.Add(1)
+				} else {
+					report.Stats.FilesSkipped.Add(1)
+				}
 			case models.ActionDelete:
 				// File deletions would be counted here in bidirectional mode
 			}
