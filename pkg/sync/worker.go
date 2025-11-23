@@ -88,12 +88,26 @@ func (w *Worker) Execute(ctx context.Context, operations []models.FileOperation,
 
 		// Skip operations that don't require action
 		if op.Action == models.ActionSkip {
-			// Distinguish between synchronized (identical) and skipped (other reasons)
-			// Use atomic operations - no mutex needed
+			// Distinguish between synchronized, errored, and intentionally skipped
 			if op.Reason == "files are identical" {
+				// Files are synchronized - identical on both sides
 				report.Stats.FilesSynchronized.Add(1)
 				// Note: formatter was already notified during comparison phase
+			} else if op.Error != nil {
+				// File has an error (e.g., comparison failed, permission denied)
+				report.Stats.FilesErrored.Add(1)
+
+				// Record the error in the report
+				errorsMu.Lock()
+				report.Errors = append(report.Errors, models.SyncError{
+					FilePath:  op.Entry.RelativePath,
+					Operation: op.Action,
+					Error:     op.Error.Error(),
+					Timestamp: time.Now(),
+				})
+				errorsMu.Unlock()
 			} else {
+				// File is intentionally skipped (e.g., dest-only in one-way mode, future: exclude patterns)
 				report.Stats.FilesSkipped.Add(1)
 			}
 			continue

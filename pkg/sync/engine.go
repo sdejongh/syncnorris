@@ -187,10 +187,14 @@ func (e *Engine) Run(ctx context.Context) (*models.SyncReport, error) {
 			case models.ActionUpdate:
 				report.Stats.FilesUpdated.Add(1)
 			case models.ActionSkip:
-				// Distinguish between synchronized (identical) and skipped (excluded/other)
+				// Distinguish between synchronized, errored, and intentionally skipped
 				if op.Reason == "files are identical" {
 					report.Stats.FilesSynchronized.Add(1)
+				} else if op.Error != nil {
+					// File has an error (comparison failed, permission denied, etc.)
+					report.Stats.FilesErrored.Add(1)
 				} else {
+					// File is intentionally skipped (dest-only in one-way, future: exclude patterns)
 					report.Stats.FilesSkipped.Add(1)
 				}
 			case models.ActionDelete:
