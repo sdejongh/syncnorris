@@ -162,6 +162,21 @@ func (f *ProgressFormatter) Progress(update ProgressUpdate) error {
 	defer f.mu.Unlock()
 
 	switch update.Type {
+	case "scan_progress":
+		// Update totals as scanning progresses
+		if update.TotalFiles > 0 {
+			f.totalFiles = update.TotalFiles
+		}
+		if update.TotalBytes > 0 {
+			f.totalBytes = update.TotalBytes
+		}
+		// Render to show updated totals
+		now := time.Now()
+		if now.Sub(f.lastDisplay) > getUpdateInterval() {
+			f.render()
+			f.lastDisplay = now
+		}
+
 	case "file_start":
 		f.activeFiles[update.CurrentFile] = &fileProgress{
 			path:      update.FilePath,
@@ -611,8 +626,12 @@ func (f *ProgressFormatter) renderContent() {
 		return sortedFiles[i].fp.path < sortedFiles[j].fp.path
 	})
 
-	// Display header if there are active files
+	// Display legend and header if there are active files
 	if len(sortedFiles) > 0 {
+		legend := "🟢 Copying  🔵 Comparing  ✅ Done  ❌ Error"
+		content.WriteString(f.truncateLine(legend) + "\n\n")
+		lines += 2
+
 		header1 := fmt.Sprintf("%-3s  %-50s  %8s  %12s  %12s",
 			"", "File", "Progress", "Copied", "Total")
 		header2 := fmt.Sprintf("%-3s  %-50s  %8s  %12s  %12s",
@@ -644,13 +663,13 @@ func (f *ProgressFormatter) renderContent() {
 		statusIcon := "📄"
 		switch fp.status {
 		case "copying":
-			statusIcon = "⏳"
+			statusIcon = "🟢"
 		case "complete":
 			statusIcon = "✅"
 		case "error":
 			statusIcon = "❌"
 		case "hashing":
-			statusIcon = "🔍"
+			statusIcon = "🔵"
 		}
 
 		// Format with aligned columns
