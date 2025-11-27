@@ -51,7 +51,7 @@ func Default() *Config {
 			ConflictResolution: models.ConflictAsk,
 		},
 		Performance: PerformanceConfig{
-			MaxWorkers:     8,
+			MaxWorkers:     5,
 			BufferSize:     65536,
 			BandwidthLimit: 0,
 		},

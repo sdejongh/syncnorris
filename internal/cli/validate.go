@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -113,11 +112,11 @@ func applyFlagsToConfig(cfg *config.Config) {
 		cfg.Sync.ConflictResolution = models.ConflictResolution(syncFlags.Conflict)
 	}
 
-	// Parallel workers
+	// Parallel workers (default: 5)
 	if syncFlags.Parallel > 0 {
 		cfg.Performance.MaxWorkers = syncFlags.Parallel
 	} else if cfg.Performance.MaxWorkers == 0 {
-		cfg.Performance.MaxWorkers = runtime.NumCPU()
+		cfg.Performance.MaxWorkers = 5
 	}
 
 	// Exclude patterns

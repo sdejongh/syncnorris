@@ -119,11 +119,11 @@ func (f *ProgressFormatter) Start(writer io.Writer, totalFiles int, totalBytes i
 	f.totalFiles = totalFiles
 	f.totalBytes = totalBytes
 
-	// Set max display files to match parallel workers
+	// Set max display files to match parallel workers (default: 5)
 	if maxWorkers > 0 {
 		f.maxDisplayFiles = maxWorkers
 	} else {
-		f.maxDisplayFiles = runtime.NumCPU()
+		f.maxDisplayFiles = 5
 	}
 
 	// Detect terminal width to prevent line wrapping issues

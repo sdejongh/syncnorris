@@ -52,7 +52,7 @@ Supports one-way and bidirectional sync with multiple comparison methods.`,
 	cmd.Flags().StringVar(&syncFlags.Comparison, "comparison", "hash", "comparison method: namesize, md5, binary, hash")
 	cmd.Flags().StringVar(&syncFlags.Conflict, "conflict", "ask", "conflict resolution: ask, source-wins, dest-wins, newer, both")
 	cmd.Flags().BoolVar(&syncFlags.DryRun, "dry-run", false, "compare only, don't sync")
-	cmd.Flags().IntVarP(&syncFlags.Parallel, "parallel", "p", 0, "number of parallel workers (default: CPU count)")
+	cmd.Flags().IntVarP(&syncFlags.Parallel, "parallel", "p", 0, "number of parallel workers (default: 5)")
 	cmd.Flags().StringVarP(&syncFlags.Bandwidth, "bandwidth", "b", "", "bandwidth limit (e.g., \"10M\", \"1G\")")
 	cmd.Flags().StringSliceVar(&syncFlags.Exclude, "exclude", []string{}, "glob patterns to exclude")
 	cmd.Flags().StringVarP(&syncFlags.Output, "output", "o", "human", "output format: human, json")
