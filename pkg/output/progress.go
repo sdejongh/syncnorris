@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"runtime"
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/sdejongh/syncnorris/pkg/models"
@@ -68,13 +70,41 @@ type ProgressFormatter struct {
 	termWidth      int // Terminal width (for preventing line wrapping)
 
 	// For instantaneous speed calculation
-	speedSamples   []speedSample // History of bytes transferred
+	speedSamples []speedSample // History of bytes transferred
+
+	// For signal handling to restore cursor
+	signalChan chan os.Signal
 }
 
 // NewProgressFormatter creates a new progress bar formatter
 func NewProgressFormatter() *ProgressFormatter {
 	return &ProgressFormatter{
 		activeFiles: make(map[int]*fileProgress),
+		signalChan:  make(chan os.Signal, 1),
+	}
+}
+
+// setupSignalHandler sets up signal handling to restore cursor on interrupt
+func (f *ProgressFormatter) setupSignalHandler() {
+	signal.Notify(f.signalChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-f.signalChan
+		f.restoreCursor()
+		os.Exit(130) // Standard exit code for SIGINT
+	}()
+}
+
+// stopSignalHandler stops the signal handler
+func (f *ProgressFormatter) stopSignalHandler() {
+	signal.Stop(f.signalChan)
+}
+
+// restoreCursor shows the cursor again (used on cleanup/interrupt)
+// Note: This may be called from signal handler, so we always write
+// the show cursor sequence to be safe (idempotent operation)
+func (f *ProgressFormatter) restoreCursor() {
+	if f.writer != nil {
+		fmt.Fprint(f.writer, "\033[?25h") // Show cursor
 	}
 }
 
@@ -110,6 +140,8 @@ func (f *ProgressFormatter) Start(writer io.Writer, totalFiles int, totalBytes i
 	// Only reset startTime on first call (when writer is being set)
 	if f.startTime.IsZero() {
 		f.startTime = time.Now()
+		// Set up signal handler on first call to restore cursor on interrupt
+		f.setupSignalHandler()
 	}
 	f.lastDisplay = time.Now()
 
@@ -508,8 +540,9 @@ func (f *ProgressFormatter) Complete(report *models.SyncReport) error {
 	f.render()
 	f.mu.Unlock()
 
-	// Show cursor again (was hidden to prevent flicker)
-	fmt.Fprint(f.writer, "\033[?25h")
+	// Stop signal handler and restore cursor
+	f.stopSignalHandler()
+	f.restoreCursor()
 
 	// Move past the progress display
 	fmt.Fprintf(f.writer, "\n")
