@@ -21,7 +21,8 @@ type ProgressUpdate struct {
 // Implementations include human-readable and JSON formatters
 type Formatter interface {
 	// Start initializes the formatter for a new sync operation
-	Start(writer io.Writer, totalFiles int, totalBytes int64) error
+	// maxWorkers indicates the number of parallel workers for display purposes
+	Start(writer io.Writer, totalFiles int, totalBytes int64, maxWorkers int) error
 
 	// Progress reports progress during sync
 	Progress(update ProgressUpdate) error

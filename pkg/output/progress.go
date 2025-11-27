@@ -20,14 +20,6 @@ const (
 	speedWindow = 3 * time.Second // Window for instantaneous speed calculation
 )
 
-// getMaxDisplayFiles returns maximum number of files to show based on OS
-// Windows benefits from fewer lines to reduce flicker
-func getMaxDisplayFiles() int {
-	if runtime.GOOS == "windows" {
-		return 3 // Show fewer files on Windows to minimize screen updates
-	}
-	return 5 // Show more files on Unix systems
-}
 
 // getUpdateInterval returns the progress update interval based on OS
 // Windows terminals have higher latency with ANSI sequences, so we use a longer interval
@@ -74,6 +66,12 @@ type ProgressFormatter struct {
 
 	// For signal handling to restore cursor
 	signalChan chan os.Signal
+
+	// Maximum number of files to display (matches parallel workers)
+	maxDisplayFiles int
+
+	// For Windows: track max lines ever displayed to avoid display artifacts
+	maxLinesDisplayed int
 }
 
 // NewProgressFormatter creates a new progress bar formatter
@@ -109,7 +107,7 @@ func (f *ProgressFormatter) restoreCursor() {
 }
 
 // Start initializes the formatter
-func (f *ProgressFormatter) Start(writer io.Writer, totalFiles int, totalBytes int64) error {
+func (f *ProgressFormatter) Start(writer io.Writer, totalFiles int, totalBytes int64, maxWorkers int) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -120,6 +118,13 @@ func (f *ProgressFormatter) Start(writer io.Writer, totalFiles int, totalBytes i
 	f.writer = writer
 	f.totalFiles = totalFiles
 	f.totalBytes = totalBytes
+
+	// Set max display files to match parallel workers
+	if maxWorkers > 0 {
+		f.maxDisplayFiles = maxWorkers
+	} else {
+		f.maxDisplayFiles = runtime.NumCPU()
+	}
 
 	// Detect terminal width to prevent line wrapping issues
 	// Try to get terminal width from stdout
@@ -251,9 +256,18 @@ func (f *ProgressFormatter) render() {
 		return
 	}
 
+	if runtime.GOOS == "windows" {
+		f.renderWindows()
+	} else {
+		f.renderUnix()
+	}
+}
+
+// renderUnix renders using standard ANSI escape sequences (for Linux/macOS)
+func (f *ProgressFormatter) renderUnix() {
 	// Save cursor position on first render, then restore it on subsequent renders
 	if f.displayLines == 0 {
-		// First render - hide cursor to prevent flicker (especially on Windows)
+		// First render - hide cursor to prevent flicker
 		fmt.Fprint(f.writer, "\033[?25l") // Hide cursor
 		f.renderContent()
 		return
@@ -263,7 +277,7 @@ func (f *ProgressFormatter) render() {
 	// Build all escape sequences into a single string to avoid buffering issues
 	var escapeSeq strings.Builder
 
-	// Hide cursor to reduce flicker (especially important on Windows)
+	// Hide cursor to reduce flicker
 	escapeSeq.WriteString("\033[?25l")
 
 	for i := 0; i < f.displayLines; i++ {
@@ -283,6 +297,281 @@ func (f *ProgressFormatter) render() {
 
 	// Now render the new content
 	f.renderContent()
+}
+
+// renderWindows renders using ANSI escape sequences optimized for Windows
+// Uses the same multi-line approach as Unix but with ASCII characters for better compatibility
+func (f *ProgressFormatter) renderWindows() {
+	if f.writer == nil {
+		return
+	}
+
+	// First render - just output content
+	if f.displayLines == 0 {
+		fmt.Fprint(f.writer, "\033[?25l") // Hide cursor
+		f.renderContentWindows()
+		return
+	}
+
+	// Subsequent renders - move cursor up and overwrite
+	// Use maxLinesDisplayed to ensure we always clear all previous content
+	var output strings.Builder
+
+	// Move cursor to beginning of our display area (use max lines ever displayed)
+	linesToMoveUp := f.maxLinesDisplayed
+	if linesToMoveUp < f.displayLines {
+		linesToMoveUp = f.displayLines
+	}
+	for i := 0; i < linesToMoveUp; i++ {
+		output.WriteString("\033[1A") // Move up one line
+	}
+	output.WriteString("\r") // Ensure we're at column 0
+
+	fmt.Fprint(f.writer, output.String())
+
+	// Render new content (each line will be padded to clear old content)
+	f.renderContentWindows()
+}
+
+// renderContentWindows renders progress display with ASCII characters for Windows compatibility
+func (f *ProgressFormatter) renderContentWindows() {
+	lines := 0
+
+	var content strings.Builder
+
+	// Show active files, sorted alphabetically
+	maxFiles := f.maxDisplayFiles
+
+	type indexedFile struct {
+		index int
+		fp    *fileProgress
+	}
+	var sortedFiles []indexedFile
+	for idx, fp := range f.activeFiles {
+		sortedFiles = append(sortedFiles, indexedFile{idx, fp})
+	}
+
+	sort.Slice(sortedFiles, func(i, j int) bool {
+		return sortedFiles[i].fp.path < sortedFiles[j].fp.path
+	})
+
+	// Display header if there are active files
+	if len(sortedFiles) > 0 {
+		header1 := fmt.Sprintf("%-4s %-50s  %8s  %12s  %12s",
+			"", "File", "Progress", "Copied", "Total")
+		header2 := fmt.Sprintf("%-4s %-50s  %8s  %12s  %12s",
+			"", "--------------------------------------------------", "--------", "------------", "------------")
+		content.WriteString(f.padToWidth(header1) + "\n")
+		content.WriteString(f.padToWidth(header2) + "\n")
+		lines += 2
+	}
+
+	count := 0
+	for _, item := range sortedFiles {
+		if count >= maxFiles {
+			break
+		}
+
+		fp := item.fp
+		percent := float64(0)
+		if fp.total > 0 {
+			percent = float64(fp.current) / float64(fp.total) * 100
+		}
+
+		filename := fp.path
+		maxFilenameLen := 50
+		if len(filename) > maxFilenameLen {
+			filename = "..." + filename[len(filename)-maxFilenameLen+3:]
+		}
+
+		// Use ASCII status indicators for Windows
+		statusIcon := "[  ]"
+		switch fp.status {
+		case "copying":
+			statusIcon = "[..]"
+		case "complete":
+			statusIcon = "[OK]"
+		case "error":
+			statusIcon = "[!!]"
+		case "hashing":
+			statusIcon = "[##]"
+		}
+
+		fileLine := fmt.Sprintf("%s %-50s  %7.1f%%  %12s  %12s",
+			statusIcon,
+			filename,
+			percent,
+			formatBytes(fp.current),
+			formatBytes(fp.total),
+		)
+		content.WriteString(f.padToWidth(fileLine) + "\n")
+		lines++
+		count++
+	}
+
+	if count > 0 {
+		content.WriteString(f.padToWidth("") + "\n")
+		lines++
+	}
+
+	// Calculate current bytes
+	currentBytes := f.processedBytes
+	for _, fp := range f.activeFiles {
+		if fp.status != "complete" {
+			currentBytes += fp.current
+		}
+	}
+
+	// Speed calculation
+	now := time.Now()
+	f.speedSamples = append(f.speedSamples, speedSample{timestamp: now, bytes: currentBytes})
+
+	cutoff := now.Add(-speedWindow)
+	validSamples := f.speedSamples[:0]
+	for _, sample := range f.speedSamples {
+		if sample.timestamp.After(cutoff) {
+			validSamples = append(validSamples, sample)
+		}
+	}
+	f.speedSamples = validSamples
+
+	instantSpeed := int64(0)
+	if len(f.speedSamples) >= 2 {
+		oldest := f.speedSamples[0]
+		newest := f.speedSamples[len(f.speedSamples)-1]
+		duration := newest.timestamp.Sub(oldest.timestamp).Seconds()
+		if duration > 0 {
+			instantSpeed = int64(float64(newest.bytes-oldest.bytes) / duration)
+		}
+	}
+
+	elapsed := time.Since(f.startTime).Seconds()
+	avgSpeed := int64(0)
+	if elapsed > 0 {
+		avgSpeed = int64(float64(currentBytes) / elapsed)
+	}
+
+	displaySpeed := instantSpeed
+	if displaySpeed == 0 {
+		displaySpeed = avgSpeed
+	}
+
+	eta := ""
+	if displaySpeed > 0 && f.totalBytes > currentBytes {
+		remaining := f.totalBytes - currentBytes
+		etaSeconds := float64(remaining) / float64(displaySpeed)
+		eta = formatDuration(time.Duration(etaSeconds) * time.Second)
+	}
+
+	barWidth := 40
+
+	// Bytes progress bar with ASCII characters
+	bytesPercent := float64(0)
+	if f.totalBytes > 0 {
+		bytesPercent = float64(currentBytes) / float64(f.totalBytes) * 100
+	}
+
+	bytesFilled := int(float64(barWidth) * bytesPercent / 100)
+	if bytesFilled > barWidth {
+		bytesFilled = barWidth
+	}
+
+	bytesBar := ""
+	for i := 0; i < barWidth; i++ {
+		if i < bytesFilled {
+			bytesBar += "#"
+		} else {
+			bytesBar += "-"
+		}
+	}
+
+	dataLine := fmt.Sprintf("Data:    [%s] %3.0f%% %s/%s",
+		bytesBar, bytesPercent, formatBytes(currentBytes), formatBytes(f.totalBytes))
+
+	if displaySpeed > 0 {
+		dataLine += fmt.Sprintf(" @ %s/s", formatBytes(displaySpeed))
+		if avgSpeed > 0 && avgSpeed != displaySpeed {
+			dataLine += fmt.Sprintf(" (avg: %s/s)", formatBytes(avgSpeed))
+		}
+	}
+
+	if eta != "" {
+		dataLine += fmt.Sprintf(" ETA: %s", eta)
+	}
+
+	content.WriteString(f.padToWidth(dataLine) + "\n")
+	lines++
+
+	// Files progress bar
+	filesPercent := float64(0)
+	if f.totalFiles > 0 {
+		filesPercent = float64(f.processedFiles) / float64(f.totalFiles) * 100
+	}
+
+	filesFilled := int(float64(barWidth) * filesPercent / 100)
+	if filesFilled > barWidth {
+		filesFilled = barWidth
+	}
+
+	filesBar := ""
+	for i := 0; i < barWidth; i++ {
+		if i < filesFilled {
+			filesBar += "#"
+		} else {
+			filesBar += "-"
+		}
+	}
+
+	// Count active files (not yet complete)
+	activeCount := 0
+	for _, fp := range f.activeFiles {
+		if fp.status != "complete" {
+			activeCount++
+		}
+	}
+
+	// Calculate pending files
+	pendingCount := f.totalFiles - f.processedFiles - activeCount
+	if pendingCount < 0 {
+		pendingCount = 0
+	}
+
+	filesLine := fmt.Sprintf("Files:   [%s] %3.0f%% (%d/%d done, %d active, %d pending)",
+		filesBar, filesPercent, f.processedFiles, f.totalFiles, activeCount, pendingCount)
+	content.WriteString(f.padToWidth(filesLine) + "\n")
+	lines++
+
+	// Pad with empty lines to match previous max height (prevents display artifacts)
+	for lines < f.maxLinesDisplayed {
+		content.WriteString(f.padToWidth("") + "\n")
+		lines++
+	}
+
+	// Update max lines displayed
+	if lines > f.maxLinesDisplayed {
+		f.maxLinesDisplayed = lines
+	}
+
+	f.displayLines = lines
+
+	fmt.Fprint(f.writer, content.String())
+}
+
+// padToWidth pads a string with spaces to the terminal width
+func (f *ProgressFormatter) padToWidth(s string) string {
+	// Count visible characters (excluding ANSI codes)
+	visibleLen := f.visibleLength(s)
+	if visibleLen >= f.termWidth {
+		return s
+	}
+	return s + strings.Repeat(" ", f.termWidth-visibleLen)
+}
+
+// visibleLength returns the visible length of a string, excluding ANSI escape codes
+func (f *ProgressFormatter) visibleLength(s string) int {
+	// Simple approach: count runes, but this doesn't account for ANSI codes
+	// For our use case, we don't use color codes, so rune count is sufficient
+	return len([]rune(s))
 }
 
 // truncateLine ensures a line doesn't exceed terminal width
@@ -305,7 +594,7 @@ func (f *ProgressFormatter) renderContent() {
 
 	// Show active files, sorted alphabetically
 	// Platform-specific: Windows shows fewer files to reduce flicker
-	maxFiles := getMaxDisplayFiles()
+	maxFiles := f.maxDisplayFiles
 
 	// First, collect and sort the active files
 	type indexedFile struct {
@@ -507,11 +796,27 @@ func (f *ProgressFormatter) renderContent() {
 		}
 	}
 
-	filesLine := fmt.Sprintf("Files:   [%s] %3.0f%% (%d/%d files)",
+	// Count active files (not yet complete)
+	activeCount := 0
+	for _, fp := range f.activeFiles {
+		if fp.status != "complete" {
+			activeCount++
+		}
+	}
+
+	// Calculate pending files
+	pendingCount := f.totalFiles - f.processedFiles - activeCount
+	if pendingCount < 0 {
+		pendingCount = 0
+	}
+
+	filesLine := fmt.Sprintf("Files:   [%s] %3.0f%% (%d/%d done, %d active, %d pending)",
 		filesBar,
 		filesPercent,
 		f.processedFiles,
 		f.totalFiles,
+		activeCount,
+		pendingCount,
 	)
 	content.WriteString(f.truncateLine(filesLine) + "\n")
 	lines++

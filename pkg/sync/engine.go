@@ -152,7 +152,7 @@ func (e *Engine) Run(ctx context.Context) (*models.SyncReport, error) {
 
 	// Initialize formatter before comparison phase
 	if e.formatter != nil {
-		e.formatter.Start(nil, totalFilesToProcess, totalBytesToProcess)
+		e.formatter.Start(nil, totalFilesToProcess, totalBytesToProcess, e.operation.MaxWorkers)
 	}
 
 	operations, err := e.planOperations(ctx, sourceFiles, destFiles)

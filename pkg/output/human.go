@@ -22,7 +22,7 @@ func NewHumanFormatter() *HumanFormatter {
 }
 
 // Start initializes the formatter
-func (f *HumanFormatter) Start(writer io.Writer, totalFiles int, totalBytes int64) error {
+func (f *HumanFormatter) Start(writer io.Writer, totalFiles int, totalBytes int64, maxWorkers int) error {
 	f.writer = writer
 	f.totalFiles = totalFiles
 	f.totalBytes = totalBytes
