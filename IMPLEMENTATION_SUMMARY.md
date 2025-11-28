@@ -440,6 +440,13 @@ make build
   - Erreurs (reason: `copy_error`, `update_error`)
 - Flag `--parallel` ajouté à la commande `compare`
 
+### Commande Version
+- Nouvelle commande `syncnorris version` avec informations détaillées:
+  - Version, commit hash, date de build
+  - Version de Go, OS/Architecture
+- Option `-s/--short` pour afficher uniquement le numéro de version
+- Makefile mis à jour pour passer commit et date via ldflags
+
 ### Changements Notables
 - Default workers: 5 (au lieu de CPU count)
 - Nouvelles icônes: 🟢 (copie), 🔵 (comparaison), ✅ (terminé), ❌ (erreur)

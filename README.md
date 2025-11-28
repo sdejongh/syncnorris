@@ -245,6 +245,7 @@ output:
 syncnorris sync      # Synchronize two folders (primary command)
 syncnorris compare   # Compare folders without syncing (alias for sync --dry-run)
 syncnorris config    # Manage configuration
+syncnorris version   # Show version, commit, build date, Go version, OS/arch
 syncnorris help      # Show help for any command
 ```
 
