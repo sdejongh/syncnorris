@@ -1,7 +1,7 @@
 # Implementation Status - syncnorris
 
 **Last Updated**: 2025-11-28
-**Version**: v0.2.4
+**Version**: v0.2.5
 **Branch**: master (merged from 001-file-sync-utility)
 
 ## Executive Summary
@@ -318,7 +318,8 @@ gopkg.in/yaml.v3              v3.0.1   // YAML parsing - USED
 - **v0.2.1**: Version command with detailed build info ✅
 - **v0.2.2**: --create-dest flag to create destination directory ✅
 - **v0.2.3**: --delete flag to remove orphan files/directories from destination ✅
-- **v0.2.4 (Current)**: Fix report duration showing 0s ✅
+- **v0.2.4**: Fix report duration showing 0s ✅
+- **v0.2.5 (Current)**: Windows performance optimizations (progress cleanup, namesize fast path) ✅
 - **v0.3.0**: JSON output, exclude patterns, timestamp comparison, bandwidth limiting
 - **v0.4.0**: Bidirectional sync, conflict resolution, resume functionality
 - **v1.0.0**: Production-ready with comprehensive tests, logging infrastructure

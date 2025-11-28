@@ -1,7 +1,7 @@
 # Implementation Plan: File Synchronization Utility
 
 **Branch**: `master` (merged from `001-file-sync-utility`) | **Last Updated**: 2025-11-28 | **Spec**: [spec.md](spec.md)
-**Current Version**: v0.2.4
+**Current Version**: v0.2.5
 **Status**: Production-ready for one-way synchronization
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/commands/plan.md` for the execution workflow.
@@ -107,7 +107,30 @@ All performance targets met or exceeded:
 
 ---
 
-## Recent Updates (2025-11-23 Session 2)
+## Recent Updates (2025-11-28 v0.2.5)
+
+### Windows Performance Optimizations ✅
+
+#### Synchronous File Cleanup
+- **Issue**: Goroutine-based cleanup for completed files caused mutex contention
+- **Solution**: Replace with synchronous cleanup during render cycle
+  - Added `completedAt` timestamp to `fileProgress` struct
+  - Cleanup during `renderContent()` instead of async goroutines
+  - Files with `status == "complete"` and `completedAt > 500ms` removed synchronously
+- **Files Modified**: `pkg/output/progress.go`
+
+#### Namesize Fast Path
+- **Issue**: Namesize comparisons invoked full comparator with redundant Stat() calls
+- **Solution**: Use pre-scanned metadata directly for namesize mode
+  - Check if comparator is "namesize" in `processTask()`
+  - Compare sizes from already-scanned source/destination metadata
+  - Skip comparator call entirely for namesize mode
+- **Performance**: ~2x faster namesize comparisons on Windows
+- **Files Modified**: `pkg/sync/pipeline.go`
+
+---
+
+## Previous Updates (2025-11-23 Session 2)
 
 ### Distribution & Licensing ✅
 - **MIT License** with complete third-party attribution

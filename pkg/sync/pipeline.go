@@ -333,47 +333,26 @@ func (p *Pipeline) processTask(ctx context.Context, workerID int, task *FileTask
 		p.activeFilesMu.Unlock()
 	}()
 
-	if p.formatter != nil {
-		p.formatter.Progress(output.ProgressUpdate{
-			Type:        "file_start",
-			FilePath:    task.RelativePath,
-			TotalBytes:  task.Size,
-			CurrentFile: fileIndex,
-		})
-	}
-
-	// Step 1: Verify source file exists and is readable
-	sourceReader, err := p.source.Read(ctx, task.RelativePath)
-	if err != nil {
-		task.MarkError(err, time.Since(startTime))
-		report.Stats.FilesErrored.Add(1)
-		p.recordError(report, task)
-		p.addResult(task)
-
-		if p.formatter != nil {
-			p.formatter.Progress(output.ProgressUpdate{
-				Type:        "file_error",
-				FilePath:    task.RelativePath,
-				CurrentFile: fileIndex,
-				Error:       err,
-			})
-		}
-		return
-	}
-	sourceReader.Close() // Close immediately, we'll reopen if needed
-
-	// Step 2: Check if destination file exists
+	// Step 1: Check if destination file exists (from pre-scanned data)
 	p.destFilesMu.RLock()
 	destInfo, destExists := p.destFiles[task.RelativePath]
 	p.destFilesMu.RUnlock()
 
 	if !destExists {
 		// File doesn't exist in destination - copy it
+		if p.formatter != nil {
+			p.formatter.Progress(output.ProgressUpdate{
+				Type:        "file_start",
+				FilePath:    task.RelativePath,
+				TotalBytes:  task.Size,
+				CurrentFile: fileIndex,
+			})
+		}
 		p.copyFile(ctx, workerID, task, report, fileIndex, startTime)
 		return
 	}
 
-	// Step 3: File exists in both - compare them
+	// Step 2: File exists in both - compare them
 	if p.formatter != nil {
 		p.formatter.Progress(output.ProgressUpdate{
 			Type:        "compare_start",
@@ -383,7 +362,32 @@ func (p *Pipeline) processTask(ctx context.Context, workerID int, task *FileTask
 		})
 	}
 
-	comparison, err := p.comparator.Compare(ctx, p.source, p.dest, task.RelativePath, task.RelativePath)
+	// Optimization: For namesize comparison, use already-scanned metadata
+	// This avoids redundant Stat() calls which are slow on Windows
+	var comparison *compare.Comparison
+	var err error
+
+	if p.comparator.Name() == "namesize" {
+		// Fast path: use pre-scanned metadata
+		if task.Size == destInfo.Size {
+			comparison = &compare.Comparison{
+				SourcePath: task.RelativePath,
+				DestPath:   task.RelativePath,
+				Result:     compare.Same,
+				Reason:     "name and size match",
+			}
+		} else {
+			comparison = &compare.Comparison{
+				SourcePath: task.RelativePath,
+				DestPath:   task.RelativePath,
+				Result:     compare.Different,
+				Reason:     "file sizes differ",
+			}
+		}
+	} else {
+		// Standard path: use comparator (for hash, md5, binary)
+		comparison, err = p.comparator.Compare(ctx, p.source, p.dest, task.RelativePath, task.RelativePath)
+	}
 	if err != nil {
 		task.MarkError(err, time.Since(startTime))
 		report.Stats.FilesErrored.Add(1)

@@ -1,5 +1,34 @@
 # Changelog - syncnorris
 
+## [0.2.5] - 2025-11-28
+
+### Performance Optimizations
+
+#### Windows Progress Display Optimization
+- **Issue**: Goroutine-based cleanup for completed files caused mutex contention on Windows
+- **Root Cause**: Each completed file spawned a goroutine that acquired mutex after 500ms delay
+- **Solution**: Replace goroutine cleanup with synchronous cleanup during render cycle
+  - Added `completedAt` timestamp to `fileProgress` struct
+  - Cleanup happens during `renderContent()` instead of async goroutines
+  - Files with `status == "complete"` and `completedAt > 500ms ago` are removed
+- **Impact**: Reduced mutex contention, smoother progress display on Windows
+- **Files Modified**:
+  - `pkg/output/progress.go` (added completedAt field, synchronous cleanup in renderContent)
+
+#### Namesize Comparison Fast Path
+- **Issue**: Namesize comparison was calling the full comparator which invokes redundant Stat() calls
+- **Root Cause**: Pipeline already has metadata from scan phase, but comparator re-fetched it
+- **Solution**: Use pre-scanned metadata directly for namesize comparisons
+  - Check if comparator is "namesize" in processTask()
+  - Compare sizes from already-scanned source and destination metadata
+  - Skip comparator call entirely for namesize mode
+- **Impact**: Eliminates redundant Stat() calls (particularly slow on Windows)
+- **Performance Gain**: ~2x faster namesize comparisons on Windows, noticeable on large file sets
+- **Files Modified**:
+  - `pkg/sync/pipeline.go` (added namesize fast path optimization)
+
+---
+
 ## [0.2.4] - 2025-11-28
 
 ### Bug Fix

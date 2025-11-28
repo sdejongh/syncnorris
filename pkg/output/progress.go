@@ -36,7 +36,8 @@ type fileProgress struct {
 	current      int64
 	total        int64
 	startTime    time.Time
-	status       string // "copying", "hashing", "complete", "error"
+	completedAt  time.Time // When the file was marked complete (for delayed removal)
+	status       string    // "copying", "hashing", "complete", "error"
 	errorMessage string
 }
 
@@ -215,14 +216,7 @@ func (f *ProgressFormatter) Progress(update ProgressUpdate) error {
 		if fp, exists := f.activeFiles[update.CurrentFile]; exists {
 			fp.current = fp.total
 			fp.status = "complete"
-
-			// Remove from display after a short delay
-			go func(fileIdx int) {
-				time.Sleep(500 * time.Millisecond)
-				f.mu.Lock()
-				delete(f.activeFiles, fileIdx)
-				f.mu.Unlock()
-			}(update.CurrentFile)
+			fp.completedAt = time.Now()
 		}
 		// Don't increment processedFiles or processedBytes here
 
@@ -230,15 +224,7 @@ func (f *ProgressFormatter) Progress(update ProgressUpdate) error {
 		if fp, exists := f.activeFiles[update.CurrentFile]; exists {
 			fp.current = fp.total
 			fp.status = "complete"
-
-			// Keep the file visible for a short time before removing
-			// This allows users to see files that were compared quickly
-			go func(fileIdx int) {
-				time.Sleep(500 * time.Millisecond)
-				f.mu.Lock()
-				delete(f.activeFiles, fileIdx)
-				f.mu.Unlock()
-			}(update.CurrentFile)
+			fp.completedAt = time.Now()
 		}
 		f.processedFiles++
 		f.processedBytes += update.BytesWritten
@@ -354,6 +340,15 @@ func (f *ProgressFormatter) renderContentWindows() {
 
 	var content strings.Builder
 
+	// Clean up completed files after visibility delay (500ms)
+	// This replaces the goroutine-based cleanup which caused mutex contention on Windows
+	now := time.Now()
+	for idx, fp := range f.activeFiles {
+		if fp.status == "complete" && !fp.completedAt.IsZero() && now.Sub(fp.completedAt) > 500*time.Millisecond {
+			delete(f.activeFiles, idx)
+		}
+	}
+
 	// Show active files, sorted alphabetically
 	maxFiles := f.maxDisplayFiles
 
@@ -438,7 +433,7 @@ func (f *ProgressFormatter) renderContentWindows() {
 	}
 
 	// Speed calculation
-	now := time.Now()
+	now = time.Now()
 	f.speedSamples = append(f.speedSamples, speedSample{timestamp: now, bytes: currentBytes})
 
 	cutoff := now.Add(-speedWindow)
@@ -607,6 +602,15 @@ func (f *ProgressFormatter) renderContent() {
 	// Build all content in memory to reduce flicker (especially on Windows)
 	var content strings.Builder
 
+	// Clean up completed files after visibility delay (500ms)
+	// This replaces the goroutine-based cleanup which caused mutex contention on Windows
+	now := time.Now()
+	for idx, fp := range f.activeFiles {
+		if fp.status == "complete" && !fp.completedAt.IsZero() && now.Sub(fp.completedAt) > 500*time.Millisecond {
+			delete(f.activeFiles, idx)
+		}
+	}
+
 	// Show active files, sorted alphabetically
 	// Platform-specific: Windows shows fewer files to reduce flicker
 	maxFiles := f.maxDisplayFiles
@@ -701,7 +705,7 @@ func (f *ProgressFormatter) renderContent() {
 	}
 
 	// Record current sample for speed calculation
-	now := time.Now()
+	now = time.Now()
 	f.speedSamples = append(f.speedSamples, speedSample{
 		timestamp: now,
 		bytes:     currentBytes,

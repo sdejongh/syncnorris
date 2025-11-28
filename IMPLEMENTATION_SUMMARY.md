@@ -1,8 +1,8 @@
 # SyncNorris - Implementation Summary
 
-**Version**: v0.2.4
+**Version**: v0.2.5
 **Last Updated**: 2025-11-28
-**Sessions**: Performance Optimization (2025-11-23), Architecture Refactor (2025-11-27), Differences Report Enhancement (2025-11-28), Delete Orphans Feature (2025-11-28)
+**Sessions**: Performance Optimization (2025-11-23), Architecture Refactor (2025-11-27), Differences Report Enhancement (2025-11-28), Delete Orphans Feature (2025-11-28), Windows Performance Optimization (2025-11-28)
 
 ## Executive Summary
 
@@ -468,7 +468,25 @@ make build
 
 ## Conclusion
 
-syncnorris v0.2.3 représente une évolution majeure de l'outil avec une architecture plus efficace et une meilleure expérience utilisateur, particulièrement sur Windows. Les gains de performance (10-40x) et l'amélioration de l'interface utilisateur placent l'outil au niveau des standards de l'industrie. L'ajout du flag `--delete` permet de maintenir une copie miroir exacte de la source vers la destination.
+syncnorris v0.2.5 représente une évolution majeure de l'outil avec une architecture plus efficace et une meilleure expérience utilisateur, particulièrement sur Windows. Les gains de performance (10-40x) et l'amélioration de l'interface utilisateur placent l'outil au niveau des standards de l'industrie. L'ajout du flag `--delete` permet de maintenir une copie miroir exacte de la source vers la destination.
+
+## Nouveautés v0.2.5 (2025-11-28)
+
+### Optimisation du Nettoyage des Fichiers Complétés
+- **Problème**: Les goroutines utilisées pour le cleanup causaient une contention de mutex sur Windows
+- **Solution**: Remplacement par un nettoyage synchrone dans le cycle de rendu
+  - Ajout d'un timestamp `completedAt` dans `fileProgress`
+  - Nettoyage effectué pendant `renderContent()` au lieu de goroutines asynchrones
+  - Fichiers avec `status == "complete"` et `completedAt > 500ms` sont supprimés
+- **Impact**: Affichage de progression plus fluide sur Windows
+
+### Fast Path pour Comparaison Namesize
+- **Problème**: La comparaison namesize appelait le comparateur complet, générant des appels Stat() redondants
+- **Solution**: Utilisation directe des métadonnées pré-scannées
+  - Vérification si le comparateur est "namesize" dans processTask()
+  - Comparaison des tailles à partir des métadonnées source/destination déjà scannées
+  - Évitement complet de l'appel au comparateur pour le mode namesize
+- **Impact**: ~2x plus rapide pour les comparaisons namesize sur Windows
 
 **Status**: ✅ Production-ready pour synchronisation one-way
 
