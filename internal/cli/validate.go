@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -148,10 +150,59 @@ func applyFlagsToConfig(cfg *config.Config) {
 	if globalFlags.Verbose {
 		cfg.Output.Progress = true
 	}
+
+	// Bandwidth limit
+	if syncFlags.Bandwidth != "" {
+		if bw, err := parseBandwidth(syncFlags.Bandwidth); err == nil {
+			cfg.Performance.BandwidthLimit = bw
+		}
+	}
+}
+
+// parseBandwidth parses a bandwidth string like "10M", "1G", "500K" into bytes per second
+func parseBandwidth(s string) (int64, error) {
+	if s == "" {
+		return 0, nil
+	}
+
+	// Pattern: number followed by optional unit (K, M, G, T)
+	re := regexp.MustCompile(`^(\d+(?:\.\d+)?)\s*([KMGT])?[Bb]?(?:/[Ss])?$`)
+	matches := re.FindStringSubmatch(strings.TrimSpace(s))
+	if matches == nil {
+		return 0, fmt.Errorf("invalid bandwidth format: %s (use: 10M, 1G, 500K)", s)
+	}
+
+	value, err := strconv.ParseFloat(matches[1], 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid bandwidth value: %s", matches[1])
+	}
+
+	unit := strings.ToUpper(matches[2])
+	var multiplier int64 = 1
+	switch unit {
+	case "K":
+		multiplier = 1024
+	case "M":
+		multiplier = 1024 * 1024
+	case "G":
+		multiplier = 1024 * 1024 * 1024
+	case "T":
+		multiplier = 1024 * 1024 * 1024 * 1024
+	case "":
+		multiplier = 1 // bytes
+	}
+
+	return int64(value * float64(multiplier)), nil
 }
 
 // createSyncOperation creates a sync operation from configuration
 func createSyncOperation(cfg *config.Config) (*models.SyncOperation, error) {
+	// Merge exclude patterns from config and command line
+	excludePatterns := cfg.Exclude
+	if len(syncFlags.Exclude) > 0 {
+		excludePatterns = append(excludePatterns, syncFlags.Exclude...)
+	}
+
 	operation := &models.SyncOperation{
 		ID:                 uuid.New().String(),
 		SourcePath:         syncFlags.Source,
@@ -159,7 +210,7 @@ func createSyncOperation(cfg *config.Config) (*models.SyncOperation, error) {
 		Mode:               cfg.Sync.Mode,
 		ComparisonMethod:   cfg.Sync.Comparison,
 		ConflictResolution: cfg.Sync.ConflictResolution,
-		ExcludePatterns:    cfg.Exclude,
+		ExcludePatterns:    excludePatterns,
 		DryRun:             syncFlags.DryRun,
 		DeleteOrphans:      syncFlags.Delete,
 		MaxWorkers:         cfg.Performance.MaxWorkers,

@@ -18,6 +18,7 @@ type MD5Comparator struct {
 	bufferPool        *sync.Pool
 	progressReport    func(path string, current, total int64) // Optional progress callback
 	enablePartialHash bool                                     // Enable partial hashing optimization
+	readerWrapper     ReaderWrapper                            // Optional reader wrapper (e.g., for rate limiting)
 }
 
 // NewMD5Comparator creates a new MD5-based comparator
@@ -45,6 +46,11 @@ func (c *MD5Comparator) SetPartialHashEnabled(enabled bool) {
 // SetProgressCallback sets the progress reporting callback
 func (c *MD5Comparator) SetProgressCallback(callback func(path string, current, total int64)) {
 	c.progressReport = callback
+}
+
+// SetReaderWrapper sets a function to wrap readers (e.g., for rate limiting)
+func (c *MD5Comparator) SetReaderWrapper(wrapper ReaderWrapper) {
+	c.readerWrapper = wrapper
 }
 
 // Compare compares two files using MD5 hash
@@ -171,6 +177,11 @@ func (c *MD5Comparator) computePartialHash(ctx context.Context, backend storage.
 	}
 	defer reader.Close()
 
+	// Apply reader wrapper if set (e.g., for rate limiting)
+	if c.readerWrapper != nil {
+		reader = c.readerWrapper(reader)
+	}
+
 	hash := md5.New()
 	bufPtr := c.bufferPool.Get().(*[]byte)
 	defer c.bufferPool.Put(bufPtr)
@@ -205,6 +216,11 @@ func (c *MD5Comparator) computeHash(ctx context.Context, backend storage.Backend
 		return "", fmt.Errorf("failed to open file: %w", err)
 	}
 	defer reader.Close()
+
+	// Apply reader wrapper if set (e.g., for rate limiting)
+	if c.readerWrapper != nil {
+		reader = c.readerWrapper(reader)
+	}
 
 	hash := md5.New()
 	bufPtr := c.bufferPool.Get().(*[]byte)

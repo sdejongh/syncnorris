@@ -2,6 +2,7 @@ package compare
 
 import (
 	"context"
+	"io"
 
 	"github.com/sdejongh/syncnorris/pkg/storage"
 )
@@ -38,4 +39,14 @@ type Comparator interface {
 
 	// Name returns the name of the comparison method
 	Name() string
+}
+
+// ReaderWrapper is a function that wraps an io.ReadCloser (e.g., for rate limiting)
+type ReaderWrapper func(io.ReadCloser) io.ReadCloser
+
+// RateLimitedComparator is an optional interface for comparators that support rate limiting
+type RateLimitedComparator interface {
+	Comparator
+	// SetReaderWrapper sets a function to wrap readers (e.g., for rate limiting)
+	SetReaderWrapper(wrapper ReaderWrapper)
 }

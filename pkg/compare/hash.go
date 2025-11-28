@@ -25,6 +25,7 @@ type HashComparator struct {
 	bufferPool        *sync.Pool
 	progressReport    func(path string, current, total int64) // Optional progress callback
 	enablePartialHash bool                                     // Enable partial hashing optimization
+	readerWrapper     ReaderWrapper                            // Optional reader wrapper (e.g., for rate limiting)
 }
 
 // NewHashComparator creates a new hash-based comparator
@@ -205,6 +206,11 @@ func (c *HashComparator) computeHash(ctx context.Context, backend storage.Backen
 	}
 	defer reader.Close()
 
+	// Apply reader wrapper if set (e.g., for rate limiting)
+	if c.readerWrapper != nil {
+		reader = c.readerWrapper(reader)
+	}
+
 	hasher := sha256.New()
 
 	// Get buffer from pool
@@ -274,6 +280,11 @@ func (c *HashComparator) computePartialHash(ctx context.Context, backend storage
 	}
 	defer reader.Close()
 
+	// Apply reader wrapper if set (e.g., for rate limiting)
+	if c.readerWrapper != nil {
+		reader = c.readerWrapper(reader)
+	}
+
 	hasher := sha256.New()
 
 	// Get buffer from pool
@@ -315,6 +326,11 @@ func (c *HashComparator) computePartialHash(ctx context.Context, backend storage
 // SetProgressCallback sets a callback for progress reporting during hash calculation
 func (c *HashComparator) SetProgressCallback(callback func(path string, current, total int64)) {
 	c.progressReport = callback
+}
+
+// SetReaderWrapper sets a function to wrap readers (e.g., for rate limiting)
+func (c *HashComparator) SetReaderWrapper(wrapper ReaderWrapper) {
+	c.readerWrapper = wrapper
 }
 
 // Name returns the comparator name

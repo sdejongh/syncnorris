@@ -1,12 +1,12 @@
 # SyncNorris - Implementation Summary
 
-**Version**: v0.2.6
+**Version**: v0.3.0
 **Last Updated**: 2025-11-28
-**Sessions**: Performance Optimization (2025-11-23), Architecture Refactor (2025-11-27), Differences Report Enhancement (2025-11-28), Delete Orphans Feature (2025-11-28), Windows Performance Optimization (2025-11-28), Windows Display Improvements (2025-11-28)
+**Sessions**: Performance Optimization (2025-11-23), Architecture Refactor (2025-11-27), Differences Report Enhancement (2025-11-28), Delete Orphans Feature (2025-11-28), Windows Performance Optimization (2025-11-28), Windows Display Improvements (2025-11-28), v0.3.0 Features (2025-11-28)
 
 ## Executive Summary
 
-syncnorris v0.2.0 représente une évolution majeure avec une **refonte architecturale en pipeline producer-consumer**, des **optimisations Windows**, et un **système de rapport de différences amélioré**. Les gains de performance atteignent **10x à 40x** pour les opérations de re-synchronisation.
+syncnorris v0.3.0 représente une évolution majeure avec une **refonte architecturale en pipeline producer-consumer**, des **optimisations Windows**, et un **système de rapport de différences amélioré**. La v0.3.0 ajoute la **sortie JSON**, les **patterns d'exclusion**, la **comparaison par timestamp**, et la **limitation de bande passante**. Les gains de performance atteignent **10x à 40x** pour les opérations de re-synchronisation.
 
 ## Problèmes Identifiés
 
@@ -501,6 +501,63 @@ syncnorris v0.2.5 représente une évolution majeure de l'outil avec une archite
   - `[!!]` pour erreur (alerte explicite)
 - **Correction d'affichage**: La légende s'affiche maintenant toujours en premier, évitant les lignes orphelines lors du premier rendu
 - **Linux/macOS**: Aucun changement, garde les emojis 🟢 🔵 ✅ ❌
+
+**Status**: ✅ Production-ready pour synchronisation one-way
+
+## Nouveautés v0.3.0 (2025-11-28)
+
+### Comparaison par Timestamp
+- **Fichier**: `pkg/compare/timestamp.go` (nouveau)
+- **Fonctionnement**: Compare nom + taille + date de modification
+- **Avantage**: Plus rapide que le hash quand les timestamps sont fiables
+- **CLI**: `--comparison timestamp`
+
+### Patterns d'Exclusion
+- **Fichiers**: `pkg/sync/pipeline.go`, `internal/cli/sync.go`
+- **Fonctionnement**: Filtrage glob des fichiers à exclure
+- **Caractéristiques**:
+  - Supporte les patterns glob (`*.log`, `.git/**`, `node_modules/**`)
+  - Les fichiers exclus sont comptés dans "skipped"
+  - Les fichiers exclus apparaissent dans le rapport de différences
+- **CLI**: `--exclude PATTERN` (répétable)
+
+### Sortie JSON
+- **Fichier**: `pkg/output/json.go` (nouveau)
+- **Fonctionnement**: Formatage JSON pour automation
+- **Caractéristiques**:
+  - Sortie machine-readable
+  - Compatible avec les pipelines CI/CD
+  - Rapport final en JSON structuré
+- **CLI**: `--output json`
+
+### Limitation de Bande Passante
+- **Fichiers**: `pkg/ratelimit/limiter.go` (nouveau), `pkg/sync/pipeline.go`, `pkg/compare/*.go`
+- **Fonctionnement**: Token bucket rate limiting
+- **Caractéristiques**:
+  - Appliqué à la copie de fichiers ET à la comparaison hash
+  - Supporte les unités K, M, G (ex: `10M`, `1G`, `500K`)
+  - Interface `ReaderWrapper` pour intégration avec comparateurs
+- **CLI**: `--bandwidth LIMIT` / `-b LIMIT`
+
+### Fichiers Créés/Modifiés
+
+#### Nouveaux Fichiers
+- `pkg/compare/timestamp.go` - Comparateur par timestamp
+- `pkg/output/json.go` - Formatter JSON
+- `pkg/ratelimit/limiter.go` - Rate limiter token bucket
+- `pkg/ratelimit/reader.go` - Reader wrapper rate-limited
+
+#### Fichiers Modifiés
+- `pkg/compare/comparator.go` - Interface `ReaderWrapper` et `RateLimitedComparator`
+- `pkg/compare/hash.go` - Support rate limiting
+- `pkg/compare/md5.go` - Support rate limiting
+- `pkg/compare/binary.go` - Support rate limiting
+- `pkg/compare/composite.go` - Délégation rate limiting
+- `pkg/sync/pipeline.go` - Intégration rate limiter, exclusion patterns, skipped files
+- `pkg/models/comparison.go` - `CompareTimestamp` constant
+- `internal/cli/sync.go` - Parsing bandwidth, exclusion patterns
+- `internal/cli/compare.go` - Flag `--bandwidth`
+- `internal/cli/validate.go` - Fonction `parseBandwidth()`
 
 **Status**: ✅ Production-ready pour synchronisation one-way
 

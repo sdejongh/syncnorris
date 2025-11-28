@@ -90,6 +90,13 @@ func (c *CompositeComparator) SetProgressCallback(callback func(path string, cur
 	}
 }
 
+// SetReaderWrapper sets a function to wrap readers (e.g., for rate limiting)
+func (c *CompositeComparator) SetReaderWrapper(wrapper ReaderWrapper) {
+	if c.hashComp != nil {
+		c.hashComp.SetReaderWrapper(wrapper)
+	}
+}
+
 // Name returns the comparator name
 func (c *CompositeComparator) Name() string {
 	if c.useHash {

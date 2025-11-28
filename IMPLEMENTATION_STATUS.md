@@ -1,12 +1,12 @@
 # Implementation Status - syncnorris
 
 **Last Updated**: 2025-11-28
-**Version**: v0.2.6
+**Version**: v0.3.0
 **Branch**: master (merged from 001-file-sync-utility)
 
 ## Executive Summary
 
-syncnorris v0.2.0 features a **refactored producer-consumer pipeline architecture** with core one-way synchronization functionality fully implemented and heavily optimized for performance. The tool is production-ready for one-way sync scenarios with hash, MD5, binary, or name/size comparison.
+syncnorris v0.3.0 features a **refactored producer-consumer pipeline architecture** with core one-way synchronization functionality fully implemented and heavily optimized for performance. The tool is production-ready for one-way sync scenarios with hash, MD5, binary, timestamp, or name/size comparison. v0.3.0 adds **JSON output**, **exclude patterns**, **timestamp comparison**, and **bandwidth limiting**.
 
 ### Quick Stats
 - **Lines of Code**: ~5,500 Go lines across 32 files
@@ -43,6 +43,10 @@ syncnorris v0.2.0 features a **refactored producer-consumer pipeline architectur
 - ✅ **Name/size comparison**
   - Fast metadata-only comparison
   - Ideal for re-sync scenarios
+- ✅ **Timestamp comparison** (v0.3.0)
+  - Name + size + modification time comparison
+  - Faster than hash-based comparison
+  - Suitable when timestamps are reliable
 
 ### Output & Display
 - ✅ **Human-readable output**
@@ -63,9 +67,27 @@ syncnorris v0.2.0 features a **refactored producer-consumer pipeline architectur
   - Comparison phase progress visibility
 - ✅ **Differences reporting**
   - Report always generated (even with no differences)
-  - Tracks all operations: copied, updated, synchronized, errors
+  - Tracks all operations: copied, updated, synchronized, skipped, errors
   - Human and JSON output formats
   - File or stdout output
+- ✅ **JSON output** (v0.3.0)
+  - Machine-readable output format
+  - Suitable for automation and scripting
+  - `--output json` flag
+
+### File Filtering (v0.3.0)
+- ✅ **Exclude patterns**
+  - Glob-based file filtering
+  - Multiple patterns via `--exclude` flag
+  - Excluded files counted in "skipped" statistics
+  - Excluded files appear in differences report
+
+### Performance Controls (v0.3.0)
+- ✅ **Bandwidth limiting**
+  - Token bucket rate limiting
+  - Applied to both file copying and hash comparison
+  - Supports K, M, G units (e.g., `10M`, `1G`)
+  - `--bandwidth` / `-b` flag
 
 ### Architecture
 - ✅ **Producer-Consumer Pipeline** (refactored 2025-11-27)
@@ -105,11 +127,7 @@ syncnorris v0.2.0 features a **refactored producer-consumer pipeline architectur
 ### CLI Flags Defined But Not Functional
 These flags are accepted by the CLI but have no effect:
 
-- ⚠️ **--comparison timestamp** - Flag exists, no code implementation
-- ⚠️ **--bandwidth / -b** - Flag exists, config field present, but no rate limiting code
-- ⚠️ **--exclude** - Flag exists, config field present, but patterns not applied
 - ⚠️ **--conflict** - Flag exists for future bidirectional support
-- ⚠️ **--output json** - Flag exists, but JSONFormatter not implemented
 
 ## Not Yet Implemented ❌
 
@@ -119,25 +137,7 @@ These flags are accepted by the CLI but have no effect:
   - Requires conflict detection and resolution logic
   - All conflict resolution flags present but unused
 
-- ❌ **JSON output formatter**
-  - Flag exists, no pkg/output/json.go
-  - Required for automation (FR-018, FR-020, User Story 5)
-
-- ❌ **Timestamp comparison**
-  - Model defined, comparator not implemented
-  - Would be faster than hash for some scenarios
-
 ### Medium Priority (Performance & UX)
-- ❌ **Bandwidth limiting**
-  - Config field present (bandwidth_limit)
-  - No rate limiter in copy operations
-  - Required for production use on limited networks
-
-- ❌ **Exclude patterns**
-  - Config and flags accept patterns
-  - Not applied during file scanning
-  - Required for .git/, node_modules/, etc.
-
 - ❌ **Logging infrastructure**
   - Config has logging section
   - No actual logger implementation
@@ -202,23 +202,23 @@ All performance goals met or exceeded:
 --comparison md5   # MD5 hash comparison
 --comparison binary  # Byte-by-byte binary comparison
 --comparison namesize  # Name+size only comparison
+--comparison timestamp  # Name+size+timestamp comparison
 --dry-run          # Preview changes without syncing
 --create-dest      # Create destination directory if it doesn't exist
 --delete           # Delete files in destination that don't exist in source
 --parallel, -p     # Number of parallel workers (default: 5)
 --diff-report      # Write differences report to file
 --diff-format      # Report format: human, json
---output human     # Human-readable output (only working format)
+--output human     # Human-readable output
+--output json      # JSON output for automation
+--exclude          # Glob patterns to exclude (repeatable)
+--bandwidth, -b    # Bandwidth limit (e.g., "10M", "1G")
 --quiet, -q        # Suppress non-error output
 --verbose, -v      # Verbose output
 --config           # Config file path
 
 # NON-FUNCTIONAL FLAGS (accepted but ignored)
 --mode bidirectional      # Returns error
---comparison timestamp    # Falls back to hash
---output json             # Falls back to human
---bandwidth, -b           # No effect
---exclude                 # No effect
 --conflict                # No effect (bidirectional not impl)
 ```
 
@@ -250,7 +250,6 @@ All performance goals met or exceeded:
 - ✅ `specs/001-file-sync-utility/plan.md` - Implementation plan
 
 ### Needs Update ⚠️
-- ⚠️ `README.md` - Claims features not yet implemented
 - ⚠️ CLI help text - Shows non-functional flags without warnings
 
 ### Missing Documentation ❌
@@ -295,23 +294,16 @@ gopkg.in/yaml.v3              v3.0.1   // YAML parsing - USED
 
 ## Recommended Next Steps
 
-### Priority 1 (MVP Completion)
-1. Implement JSON output formatter (required for automation)
-2. Implement exclude patterns (required for real-world use)
-3. Add comprehensive error handling and logging
-4. Implement bandwidth limiting
-
-### Priority 2 (Production Readiness)
+### Priority 1 (Production Readiness)
 1. Implement bidirectional sync with conflict resolution
-2. Add timestamp comparison method (binary already implemented)
-3. Implement resume/checkpoint functionality
-4. Add integration tests and CI/CD
+2. Implement resume/checkpoint functionality
+3. Add integration tests and CI/CD
+4. Implement logging infrastructure
 
-### Priority 3 (Advanced Features)
+### Priority 2 (Advanced Features)
 1. Network storage backends (SMB, NFS, S3)
-2. File deletion/cleanup modes
-3. Symbolic link handling
-4. Platform-specific optimizations
+2. Symbolic link handling
+3. Platform-specific optimizations
 
 ## Version Roadmap
 
@@ -322,8 +314,8 @@ gopkg.in/yaml.v3              v3.0.1   // YAML parsing - USED
 - **v0.2.3**: --delete flag to remove orphan files/directories from destination ✅
 - **v0.2.4**: Fix report duration showing 0s ✅
 - **v0.2.5**: Windows performance optimizations (progress cleanup, namesize fast path) ✅
-- **v0.2.6 (Current)**: Windows display improvements (clearer ASCII status icons: `[>>]` `[??]` `[OK]` `[!!]`) ✅
-- **v0.3.0**: JSON output, exclude patterns, timestamp comparison, bandwidth limiting
+- **v0.2.6**: Windows display improvements (clearer ASCII status icons: `[>>]` `[??]` `[OK]` `[!!]`) ✅
+- **v0.3.0 (Current)**: JSON output, exclude patterns, timestamp comparison, bandwidth limiting ✅
 - **v0.4.0**: Bidirectional sync, conflict resolution, resume functionality
 - **v1.0.0**: Production-ready with comprehensive tests, logging infrastructure
 - **v2.0.0**: Advanced features (network backends, S3, incremental binary diff)
@@ -337,19 +329,18 @@ gopkg.in/yaml.v3              v3.0.1   // YAML parsing - USED
 | US1: One-way Sync | 11 | 11 | 0 |
 | US2: Comparison | 8 | 8 | 0 |
 | US3: Bidirectional | 9 | 0 | 9 |
-| US4: Comparison Methods | 5 | 3 | 2 |
-| US5: JSON Output | 5 | 0 | 5 |
-| Advanced Features | 23 | 4 | 19 |
-| **TOTAL** | **88** | **53** | **35** |
+| US4: Comparison Methods | 5 | 5 | 0 |
+| US5: JSON Output | 5 | 5 | 0 |
+| Advanced Features | 23 | 10 | 13 |
+| **TOTAL** | **88** | **66** | **22** |
 
-**Progress**: 60% complete | **MVP**: ✅ Complete
+**Progress**: 75% complete | **MVP**: ✅ Complete | **v0.3.0**: ✅ Complete
 
 ## Conclusion
 
-syncnorris has a **solid foundation** with excellent performance characteristics. The core one-way synchronization is production-ready and heavily optimized. However, several advertised features (bidirectional, JSON output, exclude patterns, bandwidth limiting) are not yet implemented despite being documented and having CLI flags.
+syncnorris v0.3.0 has a **solid foundation** with excellent performance characteristics. The core one-way synchronization is production-ready and heavily optimized. With v0.3.0, key features including **JSON output**, **exclude patterns**, **timestamp comparison**, and **bandwidth limiting** are now fully implemented.
 
 **Recommendations**:
-1. Clearly mark unimplemented features in CLI help text
-2. Prioritize JSON output (US5) for automation use cases
-3. Implement exclude patterns for real-world usability
-4. Add comprehensive unit and integration tests before v1.0.0
+1. Prioritize bidirectional sync for next major release
+2. Add comprehensive unit and integration tests before v1.0.0
+3. Implement logging infrastructure for production use

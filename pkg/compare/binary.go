@@ -18,6 +18,7 @@ type BinaryComparator struct {
 	bufferSize     int
 	bufferPool     *sync.Pool
 	progressReport func(path string, current, total int64) // Optional progress callback
+	readerWrapper  ReaderWrapper                           // Optional reader wrapper (e.g., for rate limiting)
 }
 
 // NewBinaryComparator creates a new byte-by-byte comparator
@@ -39,6 +40,11 @@ func NewBinaryComparator(bufferSize int) *BinaryComparator {
 // SetProgressCallback sets the progress reporting callback
 func (c *BinaryComparator) SetProgressCallback(callback func(path string, current, total int64)) {
 	c.progressReport = callback
+}
+
+// SetReaderWrapper sets a function to wrap readers (e.g., for rate limiting)
+func (c *BinaryComparator) SetReaderWrapper(wrapper ReaderWrapper) {
+	c.readerWrapper = wrapper
 }
 
 // Compare compares two files byte-by-byte
@@ -99,6 +105,14 @@ func (c *BinaryComparator) Compare(ctx context.Context, source, dest storage.Bac
 	}
 	defer destReader.Close()
 
+	// Apply reader wrapper if set (e.g., for rate limiting)
+	var sourceReaderWrapped io.Reader = sourceReader
+	var destReaderWrapped io.Reader = destReader
+	if c.readerWrapper != nil {
+		sourceReaderWrapped = c.readerWrapper(sourceReader)
+		destReaderWrapped = c.readerWrapper(destReader)
+	}
+
 	// Get buffers from pool
 	sourceBufPtr := c.bufferPool.Get().(*[]byte)
 	defer c.bufferPool.Put(sourceBufPtr)
@@ -127,8 +141,8 @@ func (c *BinaryComparator) Compare(ctx context.Context, source, dest storage.Bac
 		}
 
 		// Read from both files
-		sourceN, sourceErr := sourceReader.Read(sourceBuf)
-		destN, destErr := destReader.Read(destBuf)
+		sourceN, sourceErr := sourceReaderWrapped.Read(sourceBuf)
+		destN, destErr := destReaderWrapped.Read(destBuf)
 
 		// Both should read the same amount (or both EOF)
 		if sourceN != destN {

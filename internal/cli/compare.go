@@ -35,6 +35,7 @@ without performing any file operations. This is equivalent to sync --dry-run.`,
 	cmd.Flags().StringVar(&syncFlags.DiffReport, "diff-report", "", "write differences report to file")
 	cmd.Flags().StringVar(&syncFlags.DiffFormat, "diff-format", "human", "differences report format: human, json")
 	cmd.Flags().IntVarP(&syncFlags.Parallel, "parallel", "p", 0, "number of parallel workers (default: 5)")
+	cmd.Flags().StringVarP(&syncFlags.Bandwidth, "bandwidth", "b", "", "bandwidth limit (e.g., \"10M\", \"1G\")")
 	cmd.Flags().BoolVar(&syncFlags.Delete, "delete", false, "include files that would be deleted from destination")
 
 	return cmd
@@ -101,16 +102,25 @@ func runCompare(cmd *cobra.Command, args []string) error {
 		// Thorough: byte-by-byte comparison
 		comparator = compare.NewBinaryComparator(cfg.Performance.BufferSize)
 
+	case models.CompareTimestamp:
+		// Fast: name+size+timestamp comparison
+		comparator = compare.NewTimestampComparator()
+
 	default:
-		return fmt.Errorf("unsupported comparison method: %s (use: namesize, md5, binary, hash)", operation.ComparisonMethod)
+		return fmt.Errorf("unsupported comparison method: %s (use: namesize, timestamp, md5, binary, hash)", operation.ComparisonMethod)
 	}
 
 	// Create output formatter
 	var formatter output.Formatter
-	if cfg.Output.Progress {
-		formatter = output.NewProgressFormatter()
-	} else {
-		formatter = output.NewHumanFormatter()
+	switch syncFlags.Output {
+	case "json":
+		formatter = output.NewJSONFormatter()
+	default:
+		if cfg.Output.Progress {
+			formatter = output.NewProgressFormatter()
+		} else {
+			formatter = output.NewHumanFormatter()
+		}
 	}
 
 	// Create sync engine (logger is nil for now)
@@ -122,10 +132,18 @@ func runCompare(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("comparison failed: %w", err)
 	}
 
-	// Always write differences report for compare command
-	// If no file specified, write to stdout
-	if err := output.WriteDifferencesReport(report, syncFlags.DiffReport, syncFlags.DiffFormat); err != nil {
-		return fmt.Errorf("failed to write differences report: %w", err)
+	// Write differences report for compare command
+	// In JSON output mode, skip the human-readable diff report (JSON formatter handles it)
+	if syncFlags.Output != "json" {
+		// If no file specified, write to stdout
+		if err := output.WriteDifferencesReport(report, syncFlags.DiffReport, syncFlags.DiffFormat); err != nil {
+			return fmt.Errorf("failed to write differences report: %w", err)
+		}
+	} else if syncFlags.DiffReport != "" {
+		// In JSON mode with explicit diff-report file, write JSON diff to file
+		if err := output.WriteDifferencesReport(report, syncFlags.DiffReport, "json"); err != nil {
+			return fmt.Errorf("failed to write differences report: %w", err)
+		}
 	}
 
 	// Exit with appropriate code

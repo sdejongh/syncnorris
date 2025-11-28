@@ -1,6 +1,6 @@
 # syncnorris
 
-**Version**: v0.2.6
+**Version**: v0.3.0
 **Status**: Production-ready for one-way synchronization
 **License**: MIT
 
@@ -33,6 +33,9 @@ Cross-platform file synchronization utility built in Go, optimized for performan
 - ✅ **Name/size comparison** (fast metadata-only mode)
   - Ideal for re-sync scenarios: 10-40x faster than hash mode
   - Sub-second re-sync for 1000 identical files
+- ✅ **Timestamp comparison** (name+size+modification time)
+  - Faster than hash-based comparison
+  - Suitable when you trust timestamps haven't been manipulated
 
 ### User Interface
 - ✅ **Advanced progress display**
@@ -58,6 +61,19 @@ Cross-platform file synchronization utility built in Go, optimized for performan
   - JSON output suitable for automation/scripting
 - ✅ **Quiet mode** for scripts (suppress non-error output)
 - ✅ **Verbose mode** for debugging
+- ✅ **JSON output** for automation and scripting (`--output json`)
+
+### File Filtering
+- ✅ **Exclude patterns** (glob-based filtering)
+  - Supports glob patterns: `*.log`, `node_modules/**`, `.git/**`
+  - Multiple patterns via `--exclude` flag (can be repeated)
+  - Excluded files are counted in "skipped" statistics and appear in differences report
+
+### Performance Controls
+- ✅ **Bandwidth limiting** (`--bandwidth`, `-b`)
+  - Limit transfer speed: `--bandwidth 10M` (10 MiB/s)
+  - Supports K, M, G units (e.g., `500K`, `1G`)
+  - Applied to both file copying and hash comparison
 
 ### Architecture (v0.2.0)
 - ✅ **Producer-Consumer Pipeline**
@@ -95,10 +111,6 @@ syncnorris has been heavily optimized and exceeds all performance targets:
 These features are **NOT yet implemented** but are planned for future releases:
 
 - 🚧 **Bidirectional synchronization** with conflict resolution
-- 🚧 **JSON output** for automation and scripting
-- 🚧 **Exclude patterns** (glob-based filtering)
-- 🚧 **Bandwidth limiting** for network-constrained environments
-- 🚧 **Timestamp comparison** method
 - 🚧 **Logging** to files (JSON, plain text)
 - 🚧 **Resume interrupted operations**
 - 🚧 **Native network storage** (SMB/Samba, NFS without mounting)
@@ -198,6 +210,9 @@ syncnorris sync -s /src -d /dst --dry-run
 ```bash
 # Use name+size comparison instead of hash (much faster for re-sync)
 syncnorris sync -s /src -d /dst --comparison namesize
+
+# Use timestamp comparison (name+size+modification time)
+syncnorris sync -s /src -d /dst --comparison timestamp
 ```
 
 ### Parallel Operations
@@ -224,20 +239,25 @@ Create a config file at `~/.config/syncnorris/config.yaml`:
 ```yaml
 sync:
   mode: oneway                    # Only 'oneway' currently supported
-  comparison: hash                # 'hash', 'md5', 'binary', or 'namesize'
+  comparison: hash                # 'hash', 'md5', 'binary', 'namesize', or 'timestamp'
 
 performance:
   max_workers: 8                  # Parallel worker count (0 = CPU count)
   buffer_size: 65536              # Buffer size for I/O operations (64KB)
+  bandwidth_limit: "0"            # Bandwidth limit (e.g., "10M", "1G", 0 = unlimited)
 
 output:
-  format: human                   # Only 'human' currently supported
+  format: human                   # 'human' or 'json'
   progress: true                  # Show real-time progress bars
   quiet: false                    # Suppress non-error output
   verbose: false                  # Extra debug information
 
-# Note: exclude, bandwidth_limit, and logging are defined
-# in config but not yet implemented
+exclude:                          # Glob patterns to exclude
+  - "*.log"
+  - ".git/**"
+  - "node_modules/**"
+
+# Note: logging is defined in config but not yet implemented
 ```
 
 ## Usage Reference
@@ -262,7 +282,7 @@ syncnorris help      # Show help for any command
 
 #### Functional Flags (Implemented)
 ```
---comparison METHOD  Comparison method: hash, md5, binary, namesize (default: hash)
+--comparison METHOD  Comparison method: hash, md5, binary, namesize, timestamp (default: hash)
 --dry-run            Compare only, don't sync
 --create-dest        Create destination directory if it doesn't exist (sync only)
 --delete             Delete files in destination that don't exist in source
@@ -271,6 +291,9 @@ syncnorris help      # Show help for any command
 --diff-report FILE   Write differences report to file (sync command)
                      Note: compare command always displays to screen by default
 --diff-format FORMAT Report format: human, json (default: human)
+--output FORMAT      Output format: human, json (default: human)
+--exclude PATTERN    Glob patterns to exclude (can be repeated)
+--bandwidth, -b      Bandwidth limit (e.g., "10M", "1G")
 ```
 
 #### Global Flags
@@ -306,10 +329,6 @@ These flags are accepted for future compatibility but currently have no effect:
 
 ```
 --mode bidirectional      # Returns error: not yet implemented
---comparison timestamp    # Falls back to hash comparison
---output json             # Falls back to human-readable output
---bandwidth, -b LIMIT     # Not yet implemented (no rate limiting)
---exclude PATTERN         # Not yet implemented (no filtering)
 --conflict STRATEGY       # Not yet implemented (bidirectional only)
 ```
 
@@ -383,6 +402,7 @@ syncnorris compare -s /original -d /backup --comparison hash
 syncnorris compare -s /original -d /backup --comparison md5
 syncnorris compare -s /original -d /backup --comparison binary
 syncnorris compare -s /original -d /backup --comparison namesize
+syncnorris compare -s /original -d /backup --comparison timestamp
 
 # Display differences in JSON format
 syncnorris compare -s /original -d /backup --diff-format json
@@ -396,7 +416,45 @@ syncnorris compare -s /original -d /backup --diff-report differences.txt
 # - Files only in destination (only with --delete flag)
 # - Files that would be deleted (with --delete flag)
 # - Files with hash/content differences
+# - Files skipped by exclude patterns
 # - Detailed metadata (size, modification time, hash)
+```
+
+### Exclude Files
+
+```bash
+# Exclude log files
+syncnorris sync -s /src -d /dst --exclude "*.log"
+
+# Exclude multiple patterns
+syncnorris sync -s /src -d /dst --exclude "*.log" --exclude ".git/**" --exclude "node_modules/**"
+
+# Excluded files appear in report with "skipped" reason
+```
+
+### Bandwidth Limiting
+
+```bash
+# Limit transfer speed to 10 MiB/s
+syncnorris sync -s /src -d /dst --bandwidth 10M
+
+# Limit to 500 KiB/s (useful for slow networks)
+syncnorris sync -s /src -d /dst -b 500K
+
+# Limit to 1 GiB/s
+syncnorris sync -s /src -d /dst -b 1G
+
+# Bandwidth is applied to both file copying and hash comparison
+```
+
+### JSON Output
+
+```bash
+# Get JSON output for automation
+syncnorris sync -s /src -d /dst --output json
+
+# Combine with diff-report for structured logging
+syncnorris sync -s /src -d /dst --output json --diff-report sync.json --diff-format json
 ```
 
 ### Generate Differences Report for Sync
@@ -525,11 +583,9 @@ go test -bench=. ./pkg/compare/
 ## Known Limitations
 
 1. **Bidirectional sync** is not yet implemented (returns error)
-2. **JSON output** is not yet implemented (falls back to human-readable)
-3. **Exclude patterns** are not yet implemented (all files processed)
-4. **Bandwidth limiting** is not yet implemented
-5. **Network storage** requires mounting (no native SMB/NFS/UNC support yet)
-6. **Interrupted operations** cannot be resumed (no checkpointing)
+2. **Network storage** requires mounting (no native SMB/NFS/UNC support yet)
+3. **Interrupted operations** cannot be resumed (no checkpointing)
+4. **Logging** to files is not yet implemented
 
 See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for complete list.
 
@@ -537,12 +593,11 @@ See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for complete list.
 
 Contributions are welcome! Priority areas:
 
-1. JSON output formatter
-2. Exclude pattern implementation
-3. Bandwidth limiting
-4. Bidirectional sync with conflict resolution
-5. Integration tests
-6. Documentation improvements
+1. Bidirectional sync with conflict resolution
+2. Resume interrupted operations
+3. Integration tests
+4. Logging infrastructure
+5. Documentation improvements
 
 ## License
 

@@ -1,5 +1,101 @@
 # Changelog - syncnorris
 
+## [0.3.0] - 2025-11-28
+
+### New Features
+
+#### Timestamp Comparison Method
+- **Implementation**: New comparison method based on name + size + modification time
+  - Faster than hash-based comparison when timestamps are reliable
+  - Ideal for scenarios where files haven't been modified since last sync
+- **CLI**: `--comparison timestamp`
+- **Files Created**:
+  - `pkg/compare/timestamp.go` (new TimestampComparator)
+- **Files Modified**:
+  - `pkg/models/comparison.go` (added CompareTimestamp constant)
+  - `internal/cli/sync.go` (added timestamp case to comparator switch)
+  - `internal/cli/compare.go` (added timestamp case to comparator switch)
+
+#### Exclude Patterns
+- **Implementation**: Glob-based file filtering during sync
+  - Supports standard glob patterns: `*.log`, `.git/**`, `node_modules/**`
+  - Multiple patterns via repeatable `--exclude` flag
+  - Excluded files are counted in "skipped" statistics
+  - Excluded files appear in differences report with reason `skipped`
+- **CLI**: `--exclude PATTERN` (can be repeated)
+- **Files Modified**:
+  - `pkg/sync/pipeline.go` (added shouldExclude() function, filter in scanSourceAndQueue())
+  - `internal/cli/sync.go` (pass ExcludePatterns to operation)
+  - `pkg/models/operation.go` (added ExcludePatterns field)
+
+#### JSON Output Formatter
+- **Implementation**: Machine-readable JSON output for automation
+  - Structured JSON output for sync reports
+  - Compatible with CI/CD pipelines and scripting
+- **CLI**: `--output json`
+- **Files Created**:
+  - `pkg/output/json.go` (new JSONFormatter)
+- **Files Modified**:
+  - `internal/cli/sync.go` (added json case to formatter switch)
+  - `internal/cli/compare.go` (added json case to formatter switch)
+
+#### Bandwidth Limiting
+- **Implementation**: Token bucket rate limiting for both file copying and hash comparison
+  - Limits read speed for all file operations
+  - Applied to copy, update, and hash computation
+  - Uses `ReaderWrapper` pattern for comparator integration
+- **CLI**: `--bandwidth LIMIT` / `-b LIMIT` (e.g., `10M`, `1G`, `500K`)
+- **Files Created**:
+  - `pkg/ratelimit/limiter.go` (token bucket rate limiter)
+  - `pkg/ratelimit/reader.go` (rate-limited reader wrapper)
+- **Files Modified**:
+  - `pkg/compare/comparator.go` (added ReaderWrapper type, RateLimitedComparator interface)
+  - `pkg/compare/hash.go` (added readerWrapper field, SetReaderWrapper method)
+  - `pkg/compare/md5.go` (added readerWrapper field, SetReaderWrapper method)
+  - `pkg/compare/binary.go` (added readerWrapper field, SetReaderWrapper method)
+  - `pkg/compare/composite.go` (added SetReaderWrapper delegation)
+  - `pkg/sync/pipeline.go` (integrated rate limiter for copy and comparison)
+  - `internal/cli/sync.go` (added bandwidth flag, parseBandwidth function)
+  - `internal/cli/compare.go` (added bandwidth flag)
+  - `internal/cli/validate.go` (added parseBandwidth function, bandwidth config application)
+
+#### Usage Examples
+```bash
+# Timestamp comparison
+syncnorris sync -s /src -d /dst --comparison timestamp
+
+# Exclude patterns
+syncnorris sync -s /src -d /dst --exclude "*.log" --exclude ".git/**"
+
+# JSON output
+syncnorris sync -s /src -d /dst --output json
+
+# Bandwidth limiting (10 MiB/s)
+syncnorris sync -s /src -d /dst --bandwidth 10M
+
+# Combined
+syncnorris sync -s /src -d /dst --output json --exclude "*.tmp" --bandwidth 5M
+```
+
+---
+
+## [0.2.6] - 2025-11-28
+
+### Windows Display Improvements
+
+#### Clearer ASCII Status Icons
+- **Issue**: Emoji icons and previous symbols weren't clear in Windows terminals
+- **Solution**: New explicit ASCII indicators for Windows only
+  - `[>>]` for copying (arrows indicating transfer)
+  - `[??]` for comparing (question marks for verification)
+  - `[OK]` for complete (explicit success)
+  - `[!!]` for error (explicit alert)
+- **Linux/macOS**: No change, keeps emoji icons 🟢 🔵 ✅ ❌
+- **Files Modified**:
+  - `pkg/output/progress.go`
+
+---
+
 ## [0.2.5] - 2025-11-28
 
 ### Performance Optimizations

@@ -128,16 +128,26 @@ func runSync(cmd *cobra.Command, args []string) error {
 		// Slowest but most precise (reports exact byte offset of difference)
 		comparator = compare.NewBinaryComparator(cfg.Performance.BufferSize)
 
+	case models.CompareTimestamp:
+		// Fast: name+size+timestamp comparison
+		// Copies only if source is newer than destination
+		comparator = compare.NewTimestampComparator()
+
 	default:
-		return fmt.Errorf("unsupported comparison method: %s (use: namesize, md5, binary, hash)", operation.ComparisonMethod)
+		return fmt.Errorf("unsupported comparison method: %s (use: namesize, timestamp, md5, binary, hash)", operation.ComparisonMethod)
 	}
 
 	// Create output formatter
 	var formatter output.Formatter
-	if cfg.Output.Progress {
-		formatter = output.NewProgressFormatter()
-	} else {
-		formatter = output.NewHumanFormatter()
+	switch syncFlags.Output {
+	case "json":
+		formatter = output.NewJSONFormatter()
+	default:
+		if cfg.Output.Progress {
+			formatter = output.NewProgressFormatter()
+		} else {
+			formatter = output.NewHumanFormatter()
+		}
 	}
 
 	// Create sync engine (logger is nil for now)

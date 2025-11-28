@@ -2,6 +2,7 @@ package sync
 
 import (
 	"context"
+	"io"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/sdejongh/syncnorris/pkg/logging"
 	"github.com/sdejongh/syncnorris/pkg/models"
 	"github.com/sdejongh/syncnorris/pkg/output"
+	"github.com/sdejongh/syncnorris/pkg/ratelimit"
 	"github.com/sdejongh/syncnorris/pkg/storage"
 )
 
@@ -48,6 +50,9 @@ type Pipeline struct {
 	// Results collection
 	results   []*FileTask
 	resultsMu sync.Mutex
+
+	// Rate limiter for bandwidth limiting (nil = unlimited)
+	rateLimiter *ratelimit.Limiter
 }
 
 // PipelineConfig holds configuration for the pipeline
@@ -80,6 +85,12 @@ func NewPipeline(
 		config.QueueSize = 100
 	}
 
+	// Create rate limiter if bandwidth limit is set
+	var rateLimiter *ratelimit.Limiter
+	if operation.BandwidthLimit > 0 {
+		rateLimiter = ratelimit.NewLimiter(operation.BandwidthLimit)
+	}
+
 	return &Pipeline{
 		source:      source,
 		dest:        dest,
@@ -93,6 +104,7 @@ func NewPipeline(
 		destDirs:    make(map[string]*storage.FileInfo),
 		activeFiles: make(map[string]int),
 		results:     make([]*FileTask, 0),
+		rateLimiter: rateLimiter,
 	}
 }
 
@@ -154,6 +166,15 @@ func (p *Pipeline) Run(ctx context.Context) (*models.SyncReport, error) {
 		})
 	}
 
+	// Setup rate limiting for comparator if bandwidth limiting is enabled
+	if p.rateLimiter != nil {
+		if comp, ok := p.comparator.(compare.RateLimitedComparator); ok {
+			comp.SetReaderWrapper(func(rc io.ReadCloser) io.ReadCloser {
+				return ratelimit.NewReadCloser(ctx, rc, p.rateLimiter)
+			})
+		}
+	}
+
 	// Phase 3: Start workers before scanning source
 	var workersWg sync.WaitGroup
 	workerCount := p.operation.MaxWorkers
@@ -176,7 +197,7 @@ func (p *Pipeline) Run(ctx context.Context) (*models.SyncReport, error) {
 		p.formatter.Start(nil, 0, 0, workerCount)
 	}
 
-	scanErr := p.scanSourceAndQueue(ctx)
+	scanErr := p.scanSourceAndQueue(ctx, report)
 
 	// Signal that scanning is complete
 	p.scanComplete.Store(true)
@@ -241,6 +262,11 @@ func (p *Pipeline) scanDestination(ctx context.Context) error {
 	defer p.destFilesMu.Unlock()
 
 	for i := range destFiles {
+		// Apply exclude patterns
+		if shouldExclude(destFiles[i].RelativePath, p.operation.ExcludePatterns) {
+			continue
+		}
+
 		if destFiles[i].IsDir {
 			// Skip root directory
 			if destFiles[i].RelativePath != "." {
@@ -255,7 +281,7 @@ func (p *Pipeline) scanDestination(ctx context.Context) error {
 }
 
 // scanSourceAndQueue scans source files and adds them to the queue
-func (p *Pipeline) scanSourceAndQueue(ctx context.Context) error {
+func (p *Pipeline) scanSourceAndQueue(ctx context.Context, report *models.SyncReport) error {
 	sourceFiles, err := p.source.List(ctx, "")
 	if err != nil {
 		return err
@@ -264,6 +290,24 @@ func (p *Pipeline) scanSourceAndQueue(ctx context.Context) error {
 	for _, f := range sourceFiles {
 		// Skip directories
 		if f.IsDir {
+			continue
+		}
+
+		// Apply exclude patterns
+		if shouldExclude(f.RelativePath, p.operation.ExcludePatterns) {
+			report.Stats.FilesSkipped.Add(1)
+			// Add to differences report
+			p.resultsMu.Lock()
+			report.Differences = append(report.Differences, models.FileDifference{
+				RelativePath: f.RelativePath,
+				Reason:       models.ReasonSkipped,
+				Details:      "excluded by pattern",
+				SourceInfo: &models.FileInfo{
+					Size:    f.Size,
+					ModTime: f.ModTime,
+				},
+			})
+			p.resultsMu.Unlock()
 			continue
 		}
 
@@ -469,6 +513,11 @@ func (p *Pipeline) copyFile(ctx context.Context, workerID int, task *FileTask, r
 	}
 	defer reader.Close()
 
+	// Wrap with rate limiter if bandwidth limiting is enabled
+	if p.rateLimiter != nil {
+		reader = ratelimit.NewReadCloser(ctx, reader, p.rateLimiter)
+	}
+
 	// Get source metadata
 	sourceInfo, err := p.source.Stat(ctx, task.RelativePath)
 	if err != nil {
@@ -591,6 +640,11 @@ func (p *Pipeline) updateFile(ctx context.Context, workerID int, task *FileTask,
 		return
 	}
 	defer reader.Close()
+
+	// Wrap with rate limiter if bandwidth limiting is enabled
+	if p.rateLimiter != nil {
+		reader = ratelimit.NewReadCloser(ctx, reader, p.rateLimiter)
+	}
 
 	sourceInfo, err := p.source.Stat(ctx, task.RelativePath)
 	if err != nil {

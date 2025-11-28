@@ -1,7 +1,7 @@
 # Implementation Plan: File Synchronization Utility
 
 **Branch**: `master` (merged from `001-file-sync-utility`) | **Last Updated**: 2025-11-28 | **Spec**: [spec.md](spec.md)
-**Current Version**: v0.2.5
+**Current Version**: v0.3.0
 **Status**: Production-ready for one-way synchronization
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/commands/plan.md` for the execution workflow.
@@ -16,14 +16,14 @@ syncnorris/
 │   └── syncnorris/
 │       └── main.go                 # CLI entry point using Cobra (exists)
 ├── pkg/                            # Public packages (~4,088 lines)
-│   ├── compare/                    # Comparison algorithms (1,020 lines)
-│   │   ├── comparator.go           # Interface definition (41 lines) ✅
+│   ├── compare/                    # Comparison algorithms (1,100+ lines)
+│   │   ├── comparator.go           # Interface definition + ReaderWrapper (60+ lines) ✅
 │   │   ├── composite.go            # Smart multi-stage comparator (99 lines) ✅
 │   │   ├── hash.go                 # SHA-256 with optimizations (323 lines) ✅
 │   │   ├── md5.go                  # MD5 alternative (269 lines) ✅
 │   │   ├── binary.go               # Byte-by-byte (215 lines) ✅
-│   │   └── namesize.go             # Metadata-only (73 lines) ✅
-│   │   └── timestamp.go            # ❌ NOT IMPLEMENTED (planned)
+│   │   ├── namesize.go             # Metadata-only (73 lines) ✅
+│   │   └── timestamp.go            # Timestamp comparison ✅ (v0.3.0)
 │   ├── config/                     # Configuration (195 lines)
 │   │   ├── config.go               # Config struct + validation ✅
 │   │   └── yaml.go                 # YAML parser ✅
@@ -39,12 +39,15 @@ syncnorris/
 │   │   └── smb.go                  # ❌ NOT IMPLEMENTED (planned)
 │   │   └── nfs.go                  # ❌ NOT IMPLEMENTED (planned)
 │   │   └── unc.go                  # ❌ NOT IMPLEMENTED (planned)
-│   ├── output/                     # Output formatters (1,263 lines)
+│   ├── output/                     # Output formatters (1,350+ lines)
 │   │   ├── formatter.go            # Formatter interface ✅
 │   │   ├── progress.go             # Advanced progress (908 lines) ✅
 │   │   ├── human.go                # Human-readable (146 lines) ✅
 │   │   ├── differences.go          # Diff reports (171 lines) ✅
-│   │   └── json.go                 # ❌ NOT IMPLEMENTED (planned)
+│   │   └── json.go                 # JSON output ✅ (v0.3.0)
+│   ├── ratelimit/                  # Rate limiting (v0.3.0)
+│   │   ├── limiter.go              # Token bucket rate limiter ✅
+│   │   └── reader.go               # Rate-limited reader wrapper ✅
 │   ├── sync/                       # Sync engine (896 lines)
 │   │   ├── engine.go               # Main orchestrator (591 lines) ✅
 │   │   ├── worker.go               # Parallel workers (249 lines) ✅
@@ -92,8 +95,8 @@ syncnorris/
 | US1: One-way Sync | P1 | ✅ **COMPLETE** | Full implementation with optimizations |
 | US2: Folder Comparison | P2 | ✅ **COMPLETE** | compare command, dry-run, diff reports |
 | US3: Bidirectional Sync | P3 | ❌ **NOT STARTED** | Returns error, no implementation |
-| US4: Multiple Comparisons | P4 | ⚠️ **PARTIAL** | 4/5 methods (missing timestamp) |
-| US5: JSON Output | P5 | ❌ **NOT STARTED** | Flag exists, no implementation |
+| US4: Multiple Comparisons | P4 | ✅ **COMPLETE** | All 5 methods (hash, md5, binary, namesize, timestamp) |
+| US5: JSON Output | P5 | ✅ **COMPLETE** | JSON formatter implemented (v0.3.0) |
 
 ### Performance Achievements ✅
 
@@ -107,7 +110,41 @@ All performance targets met or exceeded:
 
 ---
 
-## Recent Updates (2025-11-28 v0.2.5)
+## Recent Updates (2025-11-28 v0.3.0)
+
+### v0.3.0 New Features ✅
+
+#### Timestamp Comparison Method
+- **File**: `pkg/compare/timestamp.go` (new)
+- **Implementation**: Compares name + size + modification time
+- **CLI**: `--comparison timestamp`
+
+#### Exclude Patterns
+- **Files**: `pkg/sync/pipeline.go`, `internal/cli/sync.go`
+- **Implementation**: Glob-based file filtering
+- **Features**:
+  - Multiple patterns via `--exclude` flag (repeatable)
+  - Excluded files counted in "skipped" statistics
+  - Excluded files appear in differences report with reason `skipped`
+- **CLI**: `--exclude PATTERN`
+
+#### JSON Output Formatter
+- **File**: `pkg/output/json.go` (new)
+- **Implementation**: Machine-readable JSON output for automation
+- **CLI**: `--output json`
+
+#### Bandwidth Limiting
+- **Files**: `pkg/ratelimit/limiter.go`, `pkg/ratelimit/reader.go` (new), `pkg/sync/pipeline.go`, `pkg/compare/*.go`
+- **Implementation**: Token bucket rate limiting
+- **Features**:
+  - Applied to both file copying AND hash comparison
+  - `ReaderWrapper` interface for comparators
+  - Supports K, M, G units (e.g., `10M`, `1G`, `500K`)
+- **CLI**: `--bandwidth LIMIT` / `-b LIMIT`
+
+---
+
+## Previous Updates (2025-11-28 v0.2.5)
 
 ### Windows Performance Optimizations ✅
 
