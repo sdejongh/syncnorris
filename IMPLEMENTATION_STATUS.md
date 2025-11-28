@@ -1,12 +1,12 @@
 # Implementation Status - syncnorris
 
 **Last Updated**: 2025-11-28
-**Version**: v0.3.0
-**Branch**: master (merged from 001-file-sync-utility)
+**Version**: v0.4.0
+**Branch**: feature/v0.4.0-bidirectional
 
 ## Executive Summary
 
-syncnorris v0.3.0 features a **refactored producer-consumer pipeline architecture** with core one-way synchronization functionality fully implemented and heavily optimized for performance. The tool is production-ready for one-way sync scenarios with hash, MD5, binary, timestamp, or name/size comparison. v0.3.0 adds **JSON output**, **exclude patterns**, **timestamp comparison**, and **bandwidth limiting**.
+syncnorris v0.4.0 features **bidirectional synchronization** with conflict detection and resolution. The tool now supports both one-way and bidirectional sync scenarios. v0.4.0 adds **bidirectional sync**, **conflict resolution strategies** (newer, source-wins, dest-wins, both), and **state tracking** for change detection between syncs.
 
 ### Quick Stats
 - **Lines of Code**: ~5,500 Go lines across 32 files
@@ -127,15 +127,15 @@ syncnorris v0.3.0 features a **refactored producer-consumer pipeline architectur
 ### CLI Flags Defined But Not Functional
 These flags are accepted by the CLI but have no effect:
 
-- ⚠️ **--conflict** - Flag exists for future bidirectional support
+- ⚠️ **--conflict ask** - Ask strategy requires interactive mode (not implemented)
 
 ## Not Yet Implemented ❌
 
 ### High Priority (Core Features)
-- ❌ **Bidirectional synchronization**
-  - Returns error: "bidirectional sync not yet implemented"
-  - Requires conflict detection and resolution logic
-  - All conflict resolution flags present but unused
+- ✅ **Bidirectional synchronization** - IMPLEMENTED in v0.4.0
+  - Full two-way sync between source and destination
+  - Conflict detection and resolution
+  - State tracking for change detection
 
 ### Medium Priority (Performance & UX)
 - ❌ **Logging infrastructure**
@@ -217,9 +217,8 @@ All performance goals met or exceeded:
 --verbose, -v      # Verbose output
 --config           # Config file path
 
-# NON-FUNCTIONAL FLAGS (accepted but ignored)
---mode bidirectional      # Returns error
---conflict                # No effect (bidirectional not impl)
+# NON-FUNCTIONAL FLAGS (accepted but partially ignored)
+--conflict ask            # Requires interactive mode (not implemented)
 ```
 
 ## Test Coverage
@@ -315,9 +314,10 @@ gopkg.in/yaml.v3              v3.0.1   // YAML parsing - USED
 - **v0.2.4**: Fix report duration showing 0s ✅
 - **v0.2.5**: Windows performance optimizations (progress cleanup, namesize fast path) ✅
 - **v0.2.6**: Windows display improvements (clearer ASCII status icons: `[>>]` `[??]` `[OK]` `[!!]`) ✅
-- **v0.3.0 (Current)**: JSON output, exclude patterns, timestamp comparison, bandwidth limiting ✅
-- **v0.4.0**: Bidirectional sync, conflict resolution, resume functionality
-- **v1.0.0**: Production-ready with comprehensive tests, logging infrastructure
+- **v0.3.0**: JSON output, exclude patterns, timestamp comparison, bandwidth limiting ✅
+- **v0.4.0 (Current)**: Bidirectional sync, conflict resolution, state tracking ✅
+- **v0.5.0**: Resume functionality, logging infrastructure
+- **v1.0.0**: Production-ready with comprehensive tests
 - **v2.0.0**: Advanced features (network backends, S3, incremental binary diff)
 
 ## Task Progress
@@ -328,19 +328,25 @@ gopkg.in/yaml.v3              v3.0.1   // YAML parsing - USED
 | Foundational | 15 | 15 | 0 |
 | US1: One-way Sync | 11 | 11 | 0 |
 | US2: Comparison | 8 | 8 | 0 |
-| US3: Bidirectional | 9 | 0 | 9 |
+| US3: Bidirectional | 9 | 9 | 0 |
 | US4: Comparison Methods | 5 | 5 | 0 |
 | US5: JSON Output | 5 | 5 | 0 |
 | Advanced Features | 23 | 10 | 13 |
-| **TOTAL** | **88** | **66** | **22** |
+| **TOTAL** | **88** | **75** | **13** |
 
-**Progress**: 75% complete | **MVP**: ✅ Complete | **v0.3.0**: ✅ Complete
+**Progress**: 85% complete | **MVP**: ✅ Complete | **v0.4.0**: ✅ Complete
 
 ## Conclusion
 
-syncnorris v0.3.0 has a **solid foundation** with excellent performance characteristics. The core one-way synchronization is production-ready and heavily optimized. With v0.3.0, key features including **JSON output**, **exclude patterns**, **timestamp comparison**, and **bandwidth limiting** are now fully implemented.
+syncnorris v0.4.0 now supports **bidirectional synchronization** with conflict detection and multiple resolution strategies. The tool is production-ready for both one-way and bidirectional sync scenarios.
+
+**Key Features Added in v0.4.0**:
+- Bidirectional sync (source ↔ destination)
+- Conflict detection (modify-modify, delete-modify, create-create)
+- Resolution strategies: newer, source-wins, dest-wins, both
+- State tracking between syncs (stored in ~/.config/syncnorris/state/)
 
 **Recommendations**:
-1. Prioritize bidirectional sync for next major release
-2. Add comprehensive unit and integration tests before v1.0.0
-3. Implement logging infrastructure for production use
+1. Add comprehensive unit and integration tests before v1.0.0
+2. Implement logging infrastructure for production use
+3. Implement resume functionality for interrupted operations

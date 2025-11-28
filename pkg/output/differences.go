@@ -68,10 +68,20 @@ func writeDifferencesHuman(report *models.SyncReport, w io.Writer) error {
 	fmt.Fprintf(w, "Mode: %s\n", report.Mode)
 	fmt.Fprintf(w, "Dry Run: %v\n\n", report.DryRun)
 
-	fmt.Fprintf(w, "Total Differences: %d\n\n", len(report.Differences))
+	fmt.Fprintf(w, "Total Differences: %d\n", len(report.Differences))
+	fmt.Fprintf(w, "Total Conflicts: %d\n\n", len(report.Conflicts))
+
+	// Write conflicts section first (if any)
+	if len(report.Conflicts) > 0 {
+		writeConflictsHuman(report.Conflicts, w)
+	}
+
+	if len(report.Differences) == 0 && len(report.Conflicts) == 0 {
+		fmt.Fprintf(w, "No differences found - directories are synchronized.\n")
+		return nil
+	}
 
 	if len(report.Differences) == 0 {
-		fmt.Fprintf(w, "No differences found - directories are synchronized.\n")
 		return nil
 	}
 
@@ -150,24 +160,76 @@ func writeDifferencesHuman(report *models.SyncReport, w io.Writer) error {
 // writeDifferencesJSON writes differences in JSON format
 func writeDifferencesJSON(report *models.SyncReport, w io.Writer) error {
 	output := struct {
-		Generated    string                   `json:"generated"`
-		SourcePath   string                   `json:"source_path"`
-		DestPath     string                   `json:"dest_path"`
-		Mode         string                   `json:"mode"`
-		DryRun       bool                     `json:"dry_run"`
-		TotalCount   int                      `json:"total_count"`
-		Differences  []models.FileDifference  `json:"differences"`
+		Generated      string                   `json:"generated"`
+		SourcePath     string                   `json:"source_path"`
+		DestPath       string                   `json:"dest_path"`
+		Mode           string                   `json:"mode"`
+		DryRun         bool                     `json:"dry_run"`
+		TotalCount     int                      `json:"total_count"`
+		ConflictCount  int                      `json:"conflict_count"`
+		Differences    []models.FileDifference  `json:"differences"`
+		Conflicts      []models.Conflict        `json:"conflicts,omitempty"`
 	}{
-		Generated:   time.Now().Format(time.RFC3339),
-		SourcePath:  report.SourcePath,
-		DestPath:    report.DestPath,
-		Mode:        string(report.Mode),
-		DryRun:      report.DryRun,
-		TotalCount:  len(report.Differences),
-		Differences: report.Differences,
+		Generated:     time.Now().Format(time.RFC3339),
+		SourcePath:    report.SourcePath,
+		DestPath:      report.DestPath,
+		Mode:          string(report.Mode),
+		DryRun:        report.DryRun,
+		TotalCount:    len(report.Differences),
+		ConflictCount: len(report.Conflicts),
+		Differences:   report.Differences,
+		Conflicts:     report.Conflicts,
 	}
 
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(output)
+}
+
+// writeConflictsHuman writes conflicts in human-readable format
+func writeConflictsHuman(conflicts []models.Conflict, w io.Writer) {
+	label := fmt.Sprintf("Conflicts Detected and Resolved (%d)", len(conflicts))
+	fmt.Fprintf(w, "%s\n", label)
+	fmt.Fprintf(w, "%s\n", strings.Repeat("-", len(label)))
+
+	// Group by conflict type
+	byType := make(map[models.ConflictType][]models.Conflict)
+	for _, c := range conflicts {
+		byType[c.Type] = append(byType[c.Type], c)
+	}
+
+	typeLabels := map[models.ConflictType]string{
+		models.ConflictModifyModify: "Both sides modified",
+		models.ConflictDeleteModify: "Deleted on one side, modified on other",
+		models.ConflictModifyDelete: "Modified on one side, deleted on other",
+		models.ConflictCreateCreate: "Created on both sides",
+	}
+
+	typeOrder := []models.ConflictType{
+		models.ConflictModifyModify,
+		models.ConflictCreateCreate,
+		models.ConflictDeleteModify,
+		models.ConflictModifyDelete,
+	}
+
+	for _, ctype := range typeOrder {
+		cs, exists := byType[ctype]
+		if !exists || len(cs) == 0 {
+			continue
+		}
+
+		fmt.Fprintf(w, "\n  %s:\n", typeLabels[ctype])
+		for _, c := range cs {
+			fmt.Fprintf(w, "    %s\n", c.Path)
+			fmt.Fprintf(w, "      Resolution: %s -> %s\n", c.Resolution, c.ResolvedAction)
+			if c.SourceEntry != nil {
+				fmt.Fprintf(w, "      Source:  %s, %s\n", formatBytes(c.SourceEntry.Size), c.SourceEntry.ModTime.Format(time.RFC3339))
+			}
+			if c.DestEntry != nil {
+				fmt.Fprintf(w, "      Dest:    %s, %s\n", formatBytes(c.DestEntry.Size), c.DestEntry.ModTime.Format(time.RFC3339))
+			}
+		}
+	}
+
+	fmt.Fprintf(w, "\n")
 }

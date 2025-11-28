@@ -1,5 +1,113 @@
 # Changelog - syncnorris
 
+## [0.4.0] - 2025-11-28
+
+### New Features
+
+#### Bidirectional Synchronization
+- **Implementation**: Full two-way sync between source and destination
+  - Files created in source are copied to destination
+  - Files created in destination are copied to source
+  - Modified files are synchronized based on conflict resolution strategy
+  - State tracking to detect changes since last sync
+- **CLI**: `--mode bidirectional` (or `-m bidirectional`)
+- **Files Created**:
+  - `pkg/sync/state.go` (new state management for tracking sync history)
+  - `pkg/sync/bidirectional.go` (new bidirectional pipeline)
+- **Files Modified**:
+  - `pkg/sync/engine.go` (added runBidirectional() method)
+
+#### Conflict Detection and Resolution
+- **Implementation**: Intelligent conflict detection with multiple resolution strategies
+  - **Conflict Types**:
+    - `modify-modify`: Both sides modified the same file
+    - `delete-modify`: One side deleted, other modified
+    - `modify-delete`: One side modified, other deleted
+    - `create-create`: Same file created on both sides
+  - **Resolution Strategies**:
+    - `newer`: Use the most recently modified version (default)
+    - `source-wins`: Always prefer source version
+    - `dest-wins`: Always prefer destination version
+    - `both`: Keep both versions with suffix (`.source-conflict`, `.dest-conflict`)
+    - `ask`: Skip conflicts for manual resolution (future feature)
+- **CLI**: `--conflict STRATEGY` (default: `newer`)
+- **Files Modified**:
+  - Uses existing models from `pkg/models/conflict.go`
+  - Uses existing models from `pkg/models/operation.go`
+
+#### State Tracking
+- **Implementation**: Persistent state to track file states between syncs
+  - State stored in `~/.config/syncnorris/state/{hash}.json`
+  - Tracks: file size, modification time, hash (optional), existence on both sides
+  - Enables detection of creates, deletes, and modifications
+  - FNV-1a hash for deterministic state file naming from paths
+- **Files Created**:
+  - `pkg/sync/state.go` (complete state management system)
+
+#### Conflicts in Differences Report
+- **Implementation**: Conflicts are now included in differences reports
+  - Human format: Shows conflict type, resolution strategy, and action taken
+  - JSON format: Full conflict details with timestamps
+  - Includes source and destination file info (size, modification time)
+- **Files Modified**:
+  - `pkg/output/differences.go` (added conflict reporting)
+
+#### Usage Examples
+```bash
+# Bidirectional sync with default conflict resolution (newer wins)
+syncnorris sync -s /source -d /dest --mode bidirectional
+
+# Bidirectional sync with source-wins conflict resolution
+syncnorris sync -s /source -d /dest --mode bidirectional --conflict source-wins
+
+# Bidirectional sync with dest-wins conflict resolution
+syncnorris sync -s /source -d /dest --mode bidirectional --conflict dest-wins
+
+# Bidirectional sync keeping both versions on conflict
+syncnorris sync -s /source -d /dest --mode bidirectional --conflict both
+
+# Dry-run to see what would happen
+syncnorris sync -s /source -d /dest --mode bidirectional --dry-run
+```
+
+### Technical Details
+
+#### Pipeline Architecture (Bidirectional)
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   BidirectionalPipeline                      │
+├─────────────────────────────────────────────────────────────┤
+│  Phase 1: Load previous state (if exists)                   │
+│  Phase 2: Scan source and destination in parallel           │
+│  Phase 3: Analyze changes and detect conflicts              │
+│  Phase 4: Resolve conflicts based on strategy               │
+│  Phase 5: Execute sync actions                              │
+│  Phase 6: Save new state                                    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### State File Format
+```json
+{
+  "version": 1,
+  "source_path": "/path/to/source",
+  "dest_path": "/path/to/dest",
+  "last_sync_time": "2025-11-28T19:26:07Z",
+  "files": {
+    "file.txt": {
+      "relative_path": "file.txt",
+      "size": 1024,
+      "mod_time": "2025-11-28T19:25:58Z",
+      "exists_in_source": true,
+      "exists_in_dest": true,
+      "is_dir": false
+    }
+  }
+}
+```
+
+---
+
 ## [0.3.0] - 2025-11-28
 
 ### New Features

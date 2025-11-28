@@ -46,8 +46,12 @@ func (e *Engine) Run(ctx context.Context) (*models.SyncReport, error) {
 		return e.runPipeline(ctx)
 	}
 
-	// Bidirectional sync not yet implemented
-	return nil, fmt.Errorf("bidirectional sync not yet implemented")
+	// Bidirectional sync
+	if e.operation.Mode == models.ModeBidirectional {
+		return e.runBidirectional(ctx)
+	}
+
+	return nil, fmt.Errorf("unknown sync mode: %s", e.operation.Mode)
 }
 
 // runPipeline executes sync using the producer-consumer pipeline
@@ -58,6 +62,26 @@ func (e *Engine) runPipeline(ctx context.Context) (*models.SyncReport, error) {
 	}
 
 	pipeline := NewPipeline(
+		e.source,
+		e.dest,
+		e.comparator,
+		e.formatter,
+		e.logger,
+		e.operation,
+		config,
+	)
+
+	return pipeline.Run(ctx)
+}
+
+// runBidirectional executes sync using the bidirectional pipeline
+func (e *Engine) runBidirectional(ctx context.Context) (*models.SyncReport, error) {
+	config := PipelineConfig{
+		MaxWorkers: e.operation.MaxWorkers,
+		QueueSize:  1000,
+	}
+
+	pipeline := NewBidirectionalPipeline(
 		e.source,
 		e.dest,
 		e.comparator,
