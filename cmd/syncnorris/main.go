@@ -15,6 +15,11 @@ var (
 )
 
 func main() {
+	// Set build info in cli package
+	cli.Version = version
+	cli.Commit = commit
+	cli.BuildDate = date
+
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -28,8 +33,8 @@ func run() error {
 		Long: `syncnorris is a cross-platform file synchronization utility built in Go.
 It supports one-way and bidirectional synchronization between local folders,
 network shares, and remote storage with multiple comparison methods.`,
-		Version: fmt.Sprintf("%s (commit: %s, built: %s)", version, commit, date),
-		SilenceUsage: true,
+		Version:       version,
+		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
 
@@ -40,6 +45,7 @@ network shares, and remote storage with multiple comparison methods.`,
 	rootCmd.AddCommand(cli.NewSyncCommand())
 	rootCmd.AddCommand(cli.NewCompareCommand())
 	rootCmd.AddCommand(cli.NewConfigCommand())
+	rootCmd.AddCommand(cli.NewVersionCommand())
 
 	return rootCmd.Execute()
 }
