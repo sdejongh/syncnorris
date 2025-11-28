@@ -1,6 +1,6 @@
 # syncnorris
 
-**Version**: v0.2.1
+**Version**: v0.2.2
 **Status**: Production-ready for one-way synchronization
 **License**: MIT
 
@@ -261,6 +261,7 @@ syncnorris help      # Show help for any command
 ```
 --comparison METHOD  Comparison method: hash, md5, binary, namesize (default: hash)
 --dry-run            Compare only, don't sync
+--create-dest        Create destination directory if it doesn't exist (sync only)
 --parallel, -p N     Number of parallel workers (default: 5)
 --mode oneway        Sync mode (only 'oneway' currently supported)
 --diff-report FILE   Write differences report to file (sync command)
@@ -332,6 +333,16 @@ syncnorris sync \
   -s /large/dataset \
   -d /backup/dataset \
   --comparison namesize
+```
+
+### Sync to New Destination
+
+```bash
+# Create destination directory if it doesn't exist
+syncnorris sync \
+  -s /data/project \
+  -d /backup/2025/project \
+  --create-dest
 ```
 
 ### Test Before Syncing

@@ -14,16 +14,16 @@
 |-------|-------|-----------|-----------|
 | Phase 1: Setup | 12 | 12 | 0 |
 | Phase 2: Foundational | 15 | 15 | 0 |
-| Phase 3: User Story 1 (P1) | 10 | 10 | 0 |
-| Phase 4: User Story 2 (P2) | 7 | 7 | 0 |
+| Phase 3: User Story 1 (P1) | 11 | 11 | 0 |
+| Phase 4: User Story 2 (P2) | 8 | 8 | 0 |
 | Phase 5: User Story 3 (P3) | 9 | 0 | 9 |
 | Phase 6: User Story 4 (P4) | 5 | 3 | 2 |
 | Phase 7: User Story 5 (P5) | 5 | 0 | 5 |
 | Phase 8: Advanced Features | 23 | 2 | 21 |
-| **TOTAL** | **86** | **49** | **37** |
+| **TOTAL** | **88** | **51** | **37** |
 
 **MVP Status**: ✅ Complete (Phases 1-3)
-**Progress**: 57% complete
+**Progress**: 58% complete
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -125,6 +125,8 @@
 - [x] T042b [US2] **BONUS**: Implement differences report generator (pkg/output/differences.go)
 - [x] T042c [US2] **BONUS**: Always generate report file even with no differences (2025-11-28)
 - [x] T042d [US2] **BONUS**: Track all operations in differences (copied, updated, errors)
+- [x] T042e [US1] **BONUS**: Add `--create-dest` flag to create destination directory (v0.2.2)
+- [x] T042f [US1] **BONUS**: Add `version` command with detailed build info (v0.2.1)
 
 **Checkpoint**: ✅ User Stories 1 AND 2 both work independently
 

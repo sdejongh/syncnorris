@@ -1,6 +1,6 @@
 # SyncNorris - Implementation Summary
 
-**Version**: 0.2.0
+**Version**: v0.2.2
 **Last Updated**: 2025-11-28
 **Sessions**: Performance Optimization (2025-11-23), Architecture Refactor (2025-11-27), Differences Report Enhancement (2025-11-28)
 
@@ -447,6 +447,12 @@ make build
 - Option `-s/--short` pour afficher uniquement le numéro de version
 - Makefile mis à jour pour passer commit et date via ldflags
 
+### Option --create-dest (v0.2.2)
+- Nouveau flag `--create-dest` pour la commande `sync`
+- Crée le répertoire de destination (et les parents) s'il n'existe pas
+- Message d'erreur explicite suggérant l'option si destination manquante
+- Non disponible pour `compare` (pas nécessaire)
+
 ### Changements Notables
 - Default workers: 5 (au lieu de CPU count)
 - Nouvelles icônes: 🟢 (copie), 🔵 (comparaison), ✅ (terminé), ❌ (erreur)
@@ -454,7 +460,7 @@ make build
 
 ## Conclusion
 
-syncnorris v0.2.0 représente une évolution majeure de l'outil avec une architecture plus efficace et une meilleure expérience utilisateur, particulièrement sur Windows. Les gains de performance (10-40x) et l'amélioration de l'interface utilisateur placent l'outil au niveau des standards de l'industrie.
+syncnorris v0.2.2 représente une évolution majeure de l'outil avec une architecture plus efficace et une meilleure expérience utilisateur, particulièrement sur Windows. Les gains de performance (10-40x) et l'amélioration de l'interface utilisateur placent l'outil au niveau des standards de l'industrie.
 
 **Status**: ✅ Production-ready pour synchronisation one-way
 

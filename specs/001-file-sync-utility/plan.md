@@ -1,8 +1,8 @@
 # Implementation Plan: File Synchronization Utility
 
 **Branch**: `master` (merged from `001-file-sync-utility`) | **Last Updated**: 2025-11-28 | **Spec**: [spec.md](spec.md)
-**Current Version**: v0.1.0-alpha (Released)
-**Status**: MVP Complete - Public Distribution Ready
+**Current Version**: v0.2.2
+**Status**: Production-ready for one-way synchronization
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/commands/plan.md` for the execution workflow.
 
@@ -536,6 +536,21 @@ const (
 - Errors automatically included in differences
 - Dry-run mode shows what would change
 - JSON suitable for feeding back to tool for targeted re-sync
+
+### Destination Directory Creation (v0.2.2)
+
+**New Flag**: `--create-dest` for sync command
+
+**Implementation** (internal/cli/sync.go, internal/cli/validate.go):
+- Creates destination directory (and all parent directories) if it doesn't exist
+- Uses `os.MkdirAll()` with permissions `0755`
+- Only available for `sync` command (not needed for `compare`)
+- Without flag: clear error message suggesting `--create-dest`
+
+**Usage**:
+```bash
+syncnorris sync -s /source -d /new/backup/path --create-dest
+```
 
 ### Robust Error Handling
 
