@@ -1,5 +1,18 @@
 # Changelog - syncnorris
 
+## [0.2.4] - 2025-11-28
+
+### Bug Fix
+
+#### Report Duration Fix
+- **Issue**: Sync completion time always showed "0s" in the summary report
+- **Root Cause**: `formatter.Complete(report)` was called before `report.Duration` was calculated
+- **Fix**: Move duration calculation before calling the formatter
+- **Files Modified**:
+  - `pkg/sync/pipeline.go` (reordered duration calculation and formatter call)
+
+---
+
 ## [0.2.3] - 2025-11-28
 
 ### Delete Orphan Files Feature

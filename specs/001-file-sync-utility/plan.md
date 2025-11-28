@@ -1,7 +1,7 @@
 # Implementation Plan: File Synchronization Utility
 
 **Branch**: `master` (merged from `001-file-sync-utility`) | **Last Updated**: 2025-11-28 | **Spec**: [spec.md](spec.md)
-**Current Version**: v0.2.3
+**Current Version**: v0.2.4
 **Status**: Production-ready for one-way synchronization
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/commands/plan.md` for the execution workflow.
