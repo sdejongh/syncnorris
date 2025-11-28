@@ -719,8 +719,9 @@ func (p *Pipeline) buildReport(report *models.SyncReport) {
 		}
 		report.Operations = append(report.Operations, op)
 
-		// Track differences for failed operations
-		if task.Result == ResultFailed {
+		// Track differences
+		switch task.Result {
+		case ResultFailed:
 			diff := models.FileDifference{
 				RelativePath: task.RelativePath,
 				Reason:       models.ReasonCopyError,
@@ -730,6 +731,41 @@ func (p *Pipeline) buildReport(report *models.SyncReport) {
 					ModTime: task.ModTime,
 				},
 			}
+			report.Differences = append(report.Differences, diff)
+
+		case ResultCopied:
+			// File only exists in source (needs to be copied)
+			diff := models.FileDifference{
+				RelativePath: task.RelativePath,
+				Reason:       models.ReasonOnlyInSource,
+				Details:      "file exists only in source",
+				SourceInfo: &models.FileInfo{
+					Size:    task.Size,
+					ModTime: task.ModTime,
+				},
+			}
+			report.Differences = append(report.Differences, diff)
+
+		case ResultUpdated:
+			// File exists in both but differs (needs update)
+			diff := models.FileDifference{
+				RelativePath: task.RelativePath,
+				Reason:       models.ReasonContentDiff,
+				Details:      "file content differs",
+				SourceInfo: &models.FileInfo{
+					Size:    task.Size,
+					ModTime: task.ModTime,
+				},
+			}
+			// Add dest info if available
+			p.destFilesMu.RLock()
+			if destInfo, exists := p.destFiles[task.RelativePath]; exists {
+				diff.DestInfo = &models.FileInfo{
+					Size:    destInfo.Size,
+					ModTime: destInfo.ModTime,
+				}
+			}
+			p.destFilesMu.RUnlock()
 			report.Differences = append(report.Differences, diff)
 		}
 	}

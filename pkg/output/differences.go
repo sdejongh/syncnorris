@@ -32,12 +32,7 @@ func WriteDifferencesReport(report *models.SyncReport, filepath string, format s
 		// Add blank line before report for better readability
 		fmt.Fprintln(w)
 	} else {
-		// Write to file
-		if len(report.Differences) == 0 {
-			// No differences - don't create empty file
-			return nil
-		}
-
+		// Write to file (always create, even if no differences)
 		file, err := os.Create(filepath)
 		if err != nil {
 			return fmt.Errorf("failed to create differences file: %w", err)
@@ -74,6 +69,11 @@ func writeDifferencesHuman(report *models.SyncReport, w io.Writer) error {
 	fmt.Fprintf(w, "Dry Run: %v\n\n", report.DryRun)
 
 	fmt.Fprintf(w, "Total Differences: %d\n\n", len(report.Differences))
+
+	if len(report.Differences) == 0 {
+		fmt.Fprintf(w, "No differences found - directories are synchronized.\n")
+		return nil
+	}
 
 	// Group by reason
 	byReason := make(map[models.DifferenceReason][]models.FileDifference)
