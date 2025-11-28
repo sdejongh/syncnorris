@@ -1,6 +1,6 @@
 # syncnorris
 
-**Version**: 0.2.0
+**Version**: v0.2.1
 **Status**: Production-ready for one-way synchronization
 **License**: MIT
 
