@@ -1,8 +1,8 @@
 # SyncNorris - Implementation Summary
 
-**Version**: v0.2.5
+**Version**: v0.2.6
 **Last Updated**: 2025-11-28
-**Sessions**: Performance Optimization (2025-11-23), Architecture Refactor (2025-11-27), Differences Report Enhancement (2025-11-28), Delete Orphans Feature (2025-11-28), Windows Performance Optimization (2025-11-28)
+**Sessions**: Performance Optimization (2025-11-23), Architecture Refactor (2025-11-27), Differences Report Enhancement (2025-11-28), Delete Orphans Feature (2025-11-28), Windows Performance Optimization (2025-11-28), Windows Display Improvements (2025-11-28)
 
 ## Executive Summary
 
@@ -487,6 +487,20 @@ syncnorris v0.2.5 représente une évolution majeure de l'outil avec une archite
   - Comparaison des tailles à partir des métadonnées source/destination déjà scannées
   - Évitement complet de l'appel au comparateur pour le mode namesize
 - **Impact**: ~2x plus rapide pour les comparaisons namesize sur Windows
+
+**Status**: ✅ Production-ready pour synchronisation one-way
+
+## Nouveautés v0.2.6 (2025-11-28)
+
+### Amélioration de l'Affichage Windows
+- **Problème**: Les icônes emoji (`🟢`, `🔵`, `✅`, `❌`) et les symboles précédents (`[..]`, `[##]`) n'étaient pas clairs dans les terminaux Windows
+- **Solution**: Nouveaux indicateurs ASCII explicites pour Windows uniquement:
+  - `[>>]` pour la copie (flèches indiquant le transfert)
+  - `[??]` pour la comparaison (points d'interrogation indiquant la vérification)
+  - `[OK]` pour terminé (succès explicite)
+  - `[!!]` pour erreur (alerte explicite)
+- **Correction d'affichage**: La légende s'affiche maintenant toujours en premier, évitant les lignes orphelines lors du premier rendu
+- **Linux/macOS**: Aucun changement, garde les emojis 🟢 🔵 ✅ ❌
 
 **Status**: ✅ Production-ready pour synchronisation one-way
 

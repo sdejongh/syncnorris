@@ -1,7 +1,7 @@
 # Implementation Status - syncnorris
 
 **Last Updated**: 2025-11-28
-**Version**: v0.2.5
+**Version**: v0.2.6
 **Branch**: master (merged from 001-file-sync-utility)
 
 ## Executive Summary
@@ -47,14 +47,16 @@ syncnorris v0.2.0 features a **refactored producer-consumer pipeline architectur
 ### Output & Display
 - ✅ **Human-readable output**
   - Real-time progress bars (data + files)
-  - Tabular file display (up to 5 concurrent files, 3 on Windows)
-  - Status icons: 🟢 copying, 🔵 comparing, ✅ complete, ❌ error
+  - Tabular file display (up to 5 concurrent files)
+  - Platform-specific status icons:
+    - Linux/macOS: 🟢 copying, 🔵 comparing, ✅ complete, ❌ error
+    - Windows: `[>>]` copying, `[??]` comparing, `[OK]` complete, `[!!]` error
   - Legend displayed at top of progress view
   - Alphabetically sorted file list
   - Instantaneous transfer rate (3-second sliding window)
   - Average transfer rate and ETA
   - Terminal width detection (prevents line wrapping)
-  - Windows optimization: 300ms update interval, reduced flicker
+  - Windows optimization: 300ms update interval, ASCII icons, reduced flicker
 - ✅ **Progress display**
   - Throttled callbacks (93% overhead reduction)
   - Smooth visual updates (max 20/sec per file)
@@ -319,7 +321,8 @@ gopkg.in/yaml.v3              v3.0.1   // YAML parsing - USED
 - **v0.2.2**: --create-dest flag to create destination directory ✅
 - **v0.2.3**: --delete flag to remove orphan files/directories from destination ✅
 - **v0.2.4**: Fix report duration showing 0s ✅
-- **v0.2.5 (Current)**: Windows performance optimizations (progress cleanup, namesize fast path) ✅
+- **v0.2.5**: Windows performance optimizations (progress cleanup, namesize fast path) ✅
+- **v0.2.6 (Current)**: Windows display improvements (clearer ASCII status icons: `[>>]` `[??]` `[OK]` `[!!]`) ✅
 - **v0.3.0**: JSON output, exclude patterns, timestamp comparison, bandwidth limiting
 - **v0.4.0**: Bidirectional sync, conflict resolution, resume functionality
 - **v1.0.0**: Production-ready with comprehensive tests, logging infrastructure

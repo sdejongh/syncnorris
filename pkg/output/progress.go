@@ -365,7 +365,12 @@ func (f *ProgressFormatter) renderContentWindows() {
 		return sortedFiles[i].fp.path < sortedFiles[j].fp.path
 	})
 
-	// Display header if there are active files
+	// Always display legend first (ensures consistent layout from first render)
+	legend := "[>>] Copying  [??] Comparing  [OK] Done  [!!] Error"
+	content.WriteString(f.padToWidth(legend) + "\n\n")
+	lines += 2
+
+	// Display file list header and files
 	if len(sortedFiles) > 0 {
 		header1 := fmt.Sprintf("%-4s %-50s  %8s  %12s  %12s",
 			"", "File", "Progress", "Copied", "Total")
@@ -374,52 +379,50 @@ func (f *ProgressFormatter) renderContentWindows() {
 		content.WriteString(f.padToWidth(header1) + "\n")
 		content.WriteString(f.padToWidth(header2) + "\n")
 		lines += 2
-	}
 
-	count := 0
-	for _, item := range sortedFiles {
-		if count >= maxFiles {
-			break
+		count := 0
+		for _, item := range sortedFiles {
+			if count >= maxFiles {
+				break
+			}
+
+			fp := item.fp
+			percent := float64(0)
+			if fp.total > 0 {
+				percent = float64(fp.current) / float64(fp.total) * 100
+			}
+
+			filename := fp.path
+			maxFilenameLen := 50
+			if len(filename) > maxFilenameLen {
+				filename = "..." + filename[len(filename)-maxFilenameLen+3:]
+			}
+
+			// Use ASCII status indicators for Windows
+			statusIcon := "[  ]"
+			switch fp.status {
+			case "copying":
+				statusIcon = "[>>]"
+			case "complete":
+				statusIcon = "[OK]"
+			case "error":
+				statusIcon = "[!!]"
+			case "hashing":
+				statusIcon = "[??]"
+			}
+
+			fileLine := fmt.Sprintf("%s %-50s  %7.1f%%  %12s  %12s",
+				statusIcon,
+				filename,
+				percent,
+				formatBytes(fp.current),
+				formatBytes(fp.total),
+			)
+			content.WriteString(f.padToWidth(fileLine) + "\n")
+			lines++
+			count++
 		}
 
-		fp := item.fp
-		percent := float64(0)
-		if fp.total > 0 {
-			percent = float64(fp.current) / float64(fp.total) * 100
-		}
-
-		filename := fp.path
-		maxFilenameLen := 50
-		if len(filename) > maxFilenameLen {
-			filename = "..." + filename[len(filename)-maxFilenameLen+3:]
-		}
-
-		// Use ASCII status indicators for Windows
-		statusIcon := "[  ]"
-		switch fp.status {
-		case "copying":
-			statusIcon = "[..]"
-		case "complete":
-			statusIcon = "[OK]"
-		case "error":
-			statusIcon = "[!!]"
-		case "hashing":
-			statusIcon = "[##]"
-		}
-
-		fileLine := fmt.Sprintf("%s %-50s  %7.1f%%  %12s  %12s",
-			statusIcon,
-			filename,
-			percent,
-			formatBytes(fp.current),
-			formatBytes(fp.total),
-		)
-		content.WriteString(f.padToWidth(fileLine) + "\n")
-		lines++
-		count++
-	}
-
-	if count > 0 {
 		content.WriteString(f.padToWidth("") + "\n")
 		lines++
 	}

@@ -1,6 +1,6 @@
 # syncnorris
 
-**Version**: v0.2.5
+**Version**: v0.2.6
 **Status**: Production-ready for one-way synchronization
 **License**: MIT
 
@@ -36,14 +36,16 @@ Cross-platform file synchronization utility built in Go, optimized for performan
 
 ### User Interface
 - ✅ **Advanced progress display**
-  - Real-time tabular view of up to 5 concurrent files (3 on Windows)
+  - Real-time tabular view of up to 5 concurrent files
   - Dual progress bars: data transferred + files processed
-  - Status icons: 🟢 copying, 🔵 comparing, ✅ complete, ❌ error
+  - **Platform-specific status icons**:
+    - Linux/macOS: 🟢 copying, 🔵 comparing, ✅ complete, ❌ error
+    - Windows: `[>>]` copying, `[??]` comparing, `[OK]` complete, `[!!]` error
   - Legend displayed at top of progress view
   - Instantaneous transfer rate (3-second sliding window) + average
   - Accurate ETA calculation
   - Terminal width detection (prevents line wrapping)
-  - Optimized for Windows terminals (reduced flicker)
+  - Optimized for Windows terminals (ASCII icons, reduced flicker)
 - ✅ **Human-readable output** with comprehensive summary statistics
 - ✅ **Differences report**
   - `compare` command: always displays differences to screen
