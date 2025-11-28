@@ -1,5 +1,44 @@
 # Changelog - syncnorris
 
+## [0.2.3] - 2025-11-28
+
+### Delete Orphan Files Feature
+
+#### New `--delete` Flag
+- **Implementation**: Delete files in destination that don't exist in source
+  - New flag `--delete` for both `sync` and `compare` commands
+  - Deletes orphan files from destination
+  - Deletes orphan directories (deepest first to avoid "directory not empty" errors)
+  - Dry-run mode: Shows "file would be deleted (dry-run)" without actually deleting
+  - Without `--delete`: Orphan files are completely ignored (not counted, not displayed)
+- **Files Modified**:
+  - `internal/cli/sync.go` (added Delete field to SyncFlags, flag registration)
+  - `internal/cli/compare.go` (added --delete flag registration)
+  - `internal/cli/validate.go` (pass DeleteOrphans to operation)
+  - `pkg/models/operation.go` (added DeleteOrphans field)
+  - `pkg/models/report.go` (added ReasonDeleted constant)
+  - `pkg/sync/pipeline.go` (added deleteOrphanFiles() method, destDirs map tracking)
+  - `pkg/output/differences.go` (added "Deleted from Destination" category)
+  - `pkg/output/human.go` (added Files deleted line)
+  - `pkg/output/progress.go` (added Files deleted line)
+
+#### Usage Examples
+```bash
+# Sync and delete orphans
+syncnorris sync -s /source -d /dest --delete
+
+# Preview what would be deleted (dry-run)
+syncnorris sync -s /source -d /dest --delete --dry-run
+
+# Compare and show what would be deleted
+syncnorris compare -s /source -d /dest --delete
+
+# Generate report including deletions
+syncnorris sync -s /source -d /dest --delete --diff-report report.json --diff-format json
+```
+
+---
+
 ## [0.2.0] - 2025-11-28
 
 ### Architecture Refactor - Producer-Consumer Pipeline

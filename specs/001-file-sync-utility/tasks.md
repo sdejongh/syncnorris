@@ -14,16 +14,16 @@
 |-------|-------|-----------|-----------|
 | Phase 1: Setup | 12 | 12 | 0 |
 | Phase 2: Foundational | 15 | 15 | 0 |
-| Phase 3: User Story 1 (P1) | 11 | 11 | 0 |
-| Phase 4: User Story 2 (P2) | 8 | 8 | 0 |
+| Phase 3: User Story 1 (P1) | 12 | 12 | 0 |
+| Phase 4: User Story 2 (P2) | 9 | 9 | 0 |
 | Phase 5: User Story 3 (P3) | 9 | 0 | 9 |
 | Phase 6: User Story 4 (P4) | 5 | 3 | 2 |
 | Phase 7: User Story 5 (P5) | 5 | 0 | 5 |
-| Phase 8: Advanced Features | 23 | 2 | 21 |
-| **TOTAL** | **88** | **51** | **37** |
+| Phase 8: Advanced Features | 23 | 4 | 19 |
+| **TOTAL** | **90** | **55** | **35** |
 
 **MVP Status**: ✅ Complete (Phases 1-3)
-**Progress**: 58% complete
+**Progress**: 61% complete
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -127,6 +127,8 @@
 - [x] T042d [US2] **BONUS**: Track all operations in differences (copied, updated, errors)
 - [x] T042e [US1] **BONUS**: Add `--create-dest` flag to create destination directory (v0.2.2)
 - [x] T042f [US1] **BONUS**: Add `version` command with detailed build info (v0.2.1)
+- [x] T042g [US1] **BONUS**: Add `--delete` flag for sync command to delete orphan files (v0.2.3)
+- [x] T042h [US2] **BONUS**: Add `--delete` flag for compare command to show orphan files (v0.2.3)
 
 **Checkpoint**: ✅ User Stories 1 AND 2 both work independently
 
@@ -228,6 +230,8 @@
 ### Error Handling & Resilience
 
 - [x] T069 [P] Implement error handling for permission errors in pkg/sync/engine.go (graceful continue, report in SyncReport)
+- [x] T069a [P] Implement orphan file/directory deletion in pkg/sync/pipeline.go (v0.2.3)
+- [x] T069b [P] Add ReasonDeleted to differences report (v0.2.3)
 - [ ] T070 [P] Implement disk space checking in pkg/sync/engine.go (detect before transfer starts)
 - [ ] T071 [P] Implement network interruption handling in pkg/sync/worker.go (retry logic, report failed files)
 - [ ] T072 Implement resume functionality in pkg/sync/resume.go (track incomplete transfers, resume from checkpoint)

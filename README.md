@@ -1,6 +1,6 @@
 # syncnorris
 
-**Version**: v0.2.2
+**Version**: v0.2.3
 **Status**: Production-ready for one-way synchronization
 **License**: MIT
 
@@ -14,6 +14,7 @@ Cross-platform file synchronization utility built in Go, optimized for performan
   - Parallel file transfers (configurable worker count)
   - Dry-run mode to preview changes without modifying files
   - Incremental sync (only changed files are transferred)
+  - **Delete orphan files** (`--delete`): Remove files from destination that don't exist in source
 
 ### Comparison Methods
 - ✅ **Hash-based comparison** (SHA-256, default and recommended)
@@ -48,8 +49,8 @@ Cross-platform file synchronization utility built in Go, optimized for performan
   - `compare` command: always displays differences to screen
   - `sync` command: optional with `--diff-report FILE`
   - **Report always created** even when no differences (v0.2.0)
-  - **Tracks all operations**: copied, updated, synchronized, errors
-  - Includes reason for each difference (only in source, content differs, copy error, etc.)
+  - **Tracks all operations**: copied, updated, synchronized, deleted, errors
+  - Includes reason for each difference (only in source, content differs, deleted, copy error, etc.)
   - Supports human-readable and JSON formats
   - Shows "No differences found" when fully synchronized
   - JSON output suitable for automation/scripting
@@ -262,6 +263,7 @@ syncnorris help      # Show help for any command
 --comparison METHOD  Comparison method: hash, md5, binary, namesize (default: hash)
 --dry-run            Compare only, don't sync
 --create-dest        Create destination directory if it doesn't exist (sync only)
+--delete             Delete files in destination that don't exist in source
 --parallel, -p N     Number of parallel workers (default: 5)
 --mode oneway        Sync mode (only 'oneway' currently supported)
 --diff-report FILE   Write differences report to file (sync command)
@@ -358,6 +360,19 @@ syncnorris compare -s ~/src -d /mnt/nas/backup
 syncnorris sync -s ~/src -d /mnt/nas/backup
 ```
 
+### Mirror Source (Delete Orphans)
+
+```bash
+# Delete files in destination that don't exist in source
+syncnorris sync -s /source -d /backup --delete
+
+# Preview what would be deleted (dry-run)
+syncnorris sync -s /source -d /backup --delete --dry-run
+
+# Or use compare command to see what would be deleted
+syncnorris compare -s /source -d /backup --delete
+```
+
 ### Compare Folders
 
 ```bash
@@ -376,7 +391,8 @@ syncnorris compare -s /original -d /backup --diff-report differences.txt
 # The report includes:
 # - Files with copy/update errors
 # - Files only in source (not yet copied)
-# - Files only in destination (one-way mode)
+# - Files only in destination (only with --delete flag)
+# - Files that would be deleted (with --delete flag)
 # - Files with hash/content differences
 # - Detailed metadata (size, modification time, hash)
 ```

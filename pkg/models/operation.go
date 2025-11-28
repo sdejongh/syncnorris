@@ -56,6 +56,7 @@ type SyncOperation struct {
 	ConflictResolution ConflictResolution
 	ExcludePatterns    []string
 	DryRun             bool
+	DeleteOrphans      bool  // Delete files in destination that don't exist in source
 	MaxWorkers         int
 	BandwidthLimit     int64 // bytes per second, 0 = unlimited
 	BufferSize         int

@@ -1,8 +1,8 @@
 # SyncNorris - Implementation Summary
 
-**Version**: v0.2.2
+**Version**: v0.2.3
 **Last Updated**: 2025-11-28
-**Sessions**: Performance Optimization (2025-11-23), Architecture Refactor (2025-11-27), Differences Report Enhancement (2025-11-28)
+**Sessions**: Performance Optimization (2025-11-23), Architecture Refactor (2025-11-27), Differences Report Enhancement (2025-11-28), Delete Orphans Feature (2025-11-28)
 
 ## Executive Summary
 
@@ -453,6 +453,14 @@ make build
 - Message d'erreur explicite suggérant l'option si destination manquante
 - Non disponible pour `compare` (pas nécessaire)
 
+### Option --delete (v0.2.3)
+- Nouveau flag `--delete` pour les commandes `sync` et `compare`
+- Supprime les fichiers du répertoire destination qui n'existent pas dans la source
+- Supprime également les répertoires orphelins (ordre: fichiers d'abord, puis répertoires du plus profond au moins profond)
+- Mode dry-run: affiche "file would be deleted (dry-run)" sans supprimer
+- Inclus dans le rapport de différences avec la raison `deleted`
+- Sans l'option `--delete`, les fichiers orphelins sont complètement ignorés (non comptés, non affichés)
+
 ### Changements Notables
 - Default workers: 5 (au lieu de CPU count)
 - Nouvelles icônes: 🟢 (copie), 🔵 (comparaison), ✅ (terminé), ❌ (erreur)
@@ -460,7 +468,7 @@ make build
 
 ## Conclusion
 
-syncnorris v0.2.2 représente une évolution majeure de l'outil avec une architecture plus efficace et une meilleure expérience utilisateur, particulièrement sur Windows. Les gains de performance (10-40x) et l'amélioration de l'interface utilisateur placent l'outil au niveau des standards de l'industrie.
+syncnorris v0.2.3 représente une évolution majeure de l'outil avec une architecture plus efficace et une meilleure expérience utilisateur, particulièrement sur Windows. Les gains de performance (10-40x) et l'amélioration de l'interface utilisateur placent l'outil au niveau des standards de l'industrie. L'ajout du flag `--delete` permet de maintenir une copie miroir exacte de la source vers la destination.
 
 **Status**: ✅ Production-ready pour synchronisation one-way
 

@@ -1,7 +1,7 @@
 # Implementation Plan: File Synchronization Utility
 
 **Branch**: `master` (merged from `001-file-sync-utility`) | **Last Updated**: 2025-11-28 | **Spec**: [spec.md](spec.md)
-**Current Version**: v0.2.2
+**Current Version**: v0.2.3
 **Status**: Production-ready for one-way synchronization
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/commands/plan.md` for the execution workflow.
@@ -550,6 +550,35 @@ const (
 **Usage**:
 ```bash
 syncnorris sync -s /source -d /new/backup/path --create-dest
+```
+
+### Delete Orphan Files (v0.2.3)
+
+**New Flag**: `--delete` for sync and compare commands
+
+**Implementation**:
+- `internal/cli/sync.go`: Added `Delete bool` field to SyncFlags
+- `internal/cli/compare.go`: Added `--delete` flag registration
+- `internal/cli/validate.go`: Pass `DeleteOrphans` to operation
+- `pkg/models/operation.go`: Added `DeleteOrphans bool` field
+- `pkg/models/report.go`: Added `ReasonDeleted` constant
+- `pkg/sync/pipeline.go`: Added `deleteOrphanFiles()` method, `destDirs` map tracking
+- `pkg/output/differences.go`: Added "Deleted from Destination" category
+
+**Behavior**:
+- Deletes files from destination that don't exist in source
+- Deletes orphan directories (deepest first to avoid "directory not empty" errors)
+- Dry-run mode: Shows "file would be deleted (dry-run)" without actually deleting
+- Deleted files included in differences report with reason `deleted`
+- Without `--delete` flag: Orphan files are completely ignored (not counted, not displayed)
+
+**Usage**:
+```bash
+# Sync and delete orphans
+syncnorris sync -s /source -d /dest --delete
+
+# Preview what would be deleted
+syncnorris compare -s /source -d /dest --delete
 ```
 
 ### Robust Error Handling

@@ -35,6 +35,7 @@ without performing any file operations. This is equivalent to sync --dry-run.`,
 	cmd.Flags().StringVar(&syncFlags.DiffReport, "diff-report", "", "write differences report to file")
 	cmd.Flags().StringVar(&syncFlags.DiffFormat, "diff-format", "human", "differences report format: human, json")
 	cmd.Flags().IntVarP(&syncFlags.Parallel, "parallel", "p", 0, "number of parallel workers (default: 5)")
+	cmd.Flags().BoolVar(&syncFlags.Delete, "delete", false, "include files that would be deleted from destination")
 
 	return cmd
 }

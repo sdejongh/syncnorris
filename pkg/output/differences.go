@@ -85,6 +85,7 @@ func writeDifferencesHuman(report *models.SyncReport, w io.Writer) error {
 	reasonOrder := []models.DifferenceReason{
 		models.ReasonCopyError,
 		models.ReasonUpdateError,
+		models.ReasonDeleted,
 		models.ReasonOnlyInSource,
 		models.ReasonOnlyInDest,
 		models.ReasonHashDiff,
@@ -96,6 +97,7 @@ func writeDifferencesHuman(report *models.SyncReport, w io.Writer) error {
 	reasonLabels := map[models.DifferenceReason]string{
 		models.ReasonCopyError:    "Copy Errors",
 		models.ReasonUpdateError:  "Update Errors",
+		models.ReasonDeleted:      "Deleted from Destination",
 		models.ReasonOnlyInSource: "Only in Source",
 		models.ReasonOnlyInDest:   "Only in Destination",
 		models.ReasonHashDiff:     "Hash Differences",

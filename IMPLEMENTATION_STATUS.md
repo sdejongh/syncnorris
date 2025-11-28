@@ -1,7 +1,7 @@
 # Implementation Status - syncnorris
 
 **Last Updated**: 2025-11-28
-**Version**: v0.2.2
+**Version**: v0.2.3
 **Branch**: master (merged from 001-file-sync-utility)
 
 ## Executive Summary
@@ -24,6 +24,7 @@ syncnorris v0.2.0 features a **refactored producer-consumer pipeline architectur
   - Parallel file transfers (configurable workers)
   - Dry-run mode (compare without syncing)
   - Files copied, updated, or synchronized
+  - **Delete orphan files** (`--delete` flag): Remove files/directories from destination that don't exist in source
 
 ### Comparison Methods
 - ✅ **Hash-based comparison** (SHA-256)
@@ -151,11 +152,11 @@ These flags are accepted by the CLI but have no effect:
   - NFS: not implemented (just mounted paths work)
   - UNC paths: not implemented
 
-- ❌ **Extended file operations**
-  - Directory deletion (clean destination)
-  - File deletion in oneway mode
-  - Symbolic link handling
-  - Hard link detection
+- ⚠️ **Extended file operations**
+  - ✅ Directory deletion (with `--delete` flag)
+  - ✅ File deletion in oneway mode (with `--delete` flag)
+  - ❌ Symbolic link handling
+  - ❌ Hard link detection
 
 - ❌ **Platform-specific features**
   - Windows: UNC path support
@@ -201,6 +202,7 @@ All performance goals met or exceeded:
 --comparison namesize  # Name+size only comparison
 --dry-run          # Preview changes without syncing
 --create-dest      # Create destination directory if it doesn't exist
+--delete           # Delete files in destination that don't exist in source
 --parallel, -p     # Number of parallel workers (default: 5)
 --diff-report      # Write differences report to file
 --diff-format      # Report format: human, json
@@ -314,7 +316,8 @@ gopkg.in/yaml.v3              v3.0.1   // YAML parsing - USED
 - **v0.1.0**: MVP - One-way sync with hash/MD5/binary/namesize comparison ✅
 - **v0.2.0**: Producer-consumer pipeline, Windows optimization, enhanced differences report ✅
 - **v0.2.1**: Version command with detailed build info ✅
-- **v0.2.2 (Current)**: --create-dest flag to create destination directory ✅
+- **v0.2.2**: --create-dest flag to create destination directory ✅
+- **v0.2.3 (Current)**: --delete flag to remove orphan files/directories from destination ✅
 - **v0.3.0**: JSON output, exclude patterns, timestamp comparison, bandwidth limiting
 - **v0.4.0**: Bidirectional sync, conflict resolution, resume functionality
 - **v1.0.0**: Production-ready with comprehensive tests, logging infrastructure
@@ -326,15 +329,15 @@ gopkg.in/yaml.v3              v3.0.1   // YAML parsing - USED
 |-------|-------|------|-----------|
 | Setup | 12 | 12 | 0 |
 | Foundational | 15 | 15 | 0 |
-| US1: One-way Sync | 10 | 10 | 0 |
-| US2: Comparison | 7 | 7 | 0 |
+| US1: One-way Sync | 11 | 11 | 0 |
+| US2: Comparison | 8 | 8 | 0 |
 | US3: Bidirectional | 9 | 0 | 9 |
 | US4: Comparison Methods | 5 | 3 | 2 |
 | US5: JSON Output | 5 | 0 | 5 |
-| Advanced Features | 23 | 2 | 21 |
-| **TOTAL** | **86** | **49** | **37** |
+| Advanced Features | 23 | 4 | 19 |
+| **TOTAL** | **88** | **53** | **35** |
 
-**Progress**: 57% complete | **MVP**: ✅ Complete
+**Progress**: 60% complete | **MVP**: ✅ Complete
 
 ## Conclusion
 

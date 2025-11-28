@@ -161,6 +161,7 @@ func createSyncOperation(cfg *config.Config) (*models.SyncOperation, error) {
 		ConflictResolution: cfg.Sync.ConflictResolution,
 		ExcludePatterns:    cfg.Exclude,
 		DryRun:             syncFlags.DryRun,
+		DeleteOrphans:      syncFlags.Delete,
 		MaxWorkers:         cfg.Performance.MaxWorkers,
 		BandwidthLimit:     cfg.Performance.BandwidthLimit,
 		BufferSize:         cfg.Performance.BufferSize,

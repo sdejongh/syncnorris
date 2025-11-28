@@ -2,6 +2,9 @@ package sync
 
 import (
 	"context"
+	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -35,6 +38,7 @@ type Pipeline struct {
 
 	// Destination file map for quick lookup (populated during scan)
 	destFiles   map[string]*storage.FileInfo
+	destDirs    map[string]*storage.FileInfo // Destination directories
 	destFilesMu sync.RWMutex
 
 	// Active files tracking for progress reporting
@@ -86,6 +90,7 @@ func NewPipeline(
 		taskQueue:   make(chan *FileTask, config.QueueSize),
 		queueSize:   config.QueueSize,
 		destFiles:   make(map[string]*storage.FileInfo),
+		destDirs:    make(map[string]*storage.FileInfo),
 		activeFiles: make(map[string]int),
 		results:     make([]*FileTask, 0),
 	}
@@ -185,7 +190,12 @@ func (p *Pipeline) Run(ctx context.Context) (*models.SyncReport, error) {
 		return report, scanErr
 	}
 
-	// Phase 4: Collect results and build report
+	// Phase 5: Delete orphan files if requested
+	if p.operation.DeleteOrphans {
+		p.deleteOrphanFiles(ctx, report)
+	}
+
+	// Phase 6: Collect results and build report
 	p.buildReport(report)
 
 	// Complete formatter
@@ -231,7 +241,12 @@ func (p *Pipeline) scanDestination(ctx context.Context) error {
 	defer p.destFilesMu.Unlock()
 
 	for i := range destFiles {
-		if !destFiles[i].IsDir {
+		if destFiles[i].IsDir {
+			// Skip root directory
+			if destFiles[i].RelativePath != "." {
+				p.destDirs[destFiles[i].RelativePath] = &destFiles[i]
+			}
+		} else {
 			p.destFiles[destFiles[i].RelativePath] = &destFiles[i]
 		}
 	}
@@ -681,7 +696,10 @@ func (p *Pipeline) buildReport(report *models.SyncReport) {
 	defer p.resultsMu.Unlock()
 
 	report.Operations = make([]models.FileOperation, 0, len(p.results))
-	report.Differences = make([]models.FileDifference, 0)
+	// Preserve existing differences (e.g., from deleteOrphanFiles)
+	if report.Differences == nil {
+		report.Differences = make([]models.FileDifference, 0)
+	}
 
 	for _, task := range p.results {
 		var action models.Action
@@ -770,40 +788,161 @@ func (p *Pipeline) buildReport(report *models.SyncReport) {
 		}
 	}
 
-	// Add dest-only files as skipped/differences
-	p.destFilesMu.RLock()
-	processedPaths := make(map[string]bool)
+	// Note: Dest-only files are only reported when --delete is used
+	// Without --delete, orphan files in destination are simply ignored
+	// (not counted, not reported) as they are outside the scope of one-way sync
+}
+
+// deleteOrphanFiles deletes files and directories that exist in destination but not in source
+func (p *Pipeline) deleteOrphanFiles(ctx context.Context, report *models.SyncReport) {
+	// Build set of source files and directories from results
+	sourceFiles := make(map[string]bool)
+	sourceDirs := make(map[string]bool)
+	p.resultsMu.Lock()
 	for _, task := range p.results {
-		processedPaths[task.RelativePath] = true
+		sourceFiles[task.RelativePath] = true
+		// Mark all parent directories as existing in source
+		dir := filepath.Dir(task.RelativePath)
+		for dir != "." && dir != "" {
+			sourceDirs[dir] = true
+			dir = filepath.Dir(dir)
+		}
+	}
+	p.resultsMu.Unlock()
+
+	// Find orphan files
+	p.destFilesMu.RLock()
+	orphanFiles := make([]string, 0)
+	for path := range p.destFiles {
+		if !sourceFiles[path] {
+			orphanFiles = append(orphanFiles, path)
+		}
 	}
 
-	for path, info := range p.destFiles {
-		if !processedPaths[path] {
-			// File exists only in destination
-			report.Stats.FilesSkipped.Add(1)
-
-			op := models.FileOperation{
-				Entry: &models.FileEntry{
-					RelativePath: path,
-					Size:         info.Size,
-					ModTime:      info.ModTime,
-				},
-				Action: models.ActionSkip,
-				Reason: "file exists only in destination",
-			}
-			report.Operations = append(report.Operations, op)
-
-			diff := models.FileDifference{
-				RelativePath: path,
-				Reason:       models.ReasonOnlyInDest,
-				Details:      "file exists only in destination",
-				DestInfo: &models.FileInfo{
-					Size:    info.Size,
-					ModTime: info.ModTime,
-				},
-			}
-			report.Differences = append(report.Differences, diff)
+	// Find orphan directories (not in source)
+	orphanDirs := make([]string, 0)
+	for path := range p.destDirs {
+		if !sourceDirs[path] {
+			orphanDirs = append(orphanDirs, path)
 		}
 	}
 	p.destFilesMu.RUnlock()
+
+	// Sort orphan directories by depth (deepest first) for proper deletion order
+	sort.Slice(orphanDirs, func(i, j int) bool {
+		return strings.Count(orphanDirs[i], string(filepath.Separator)) > strings.Count(orphanDirs[j], string(filepath.Separator))
+	})
+
+	// Delete orphan files first
+	for _, path := range orphanFiles {
+		// Get file info for the report
+		p.destFilesMu.RLock()
+		fileInfo := p.destFiles[path]
+		p.destFilesMu.RUnlock()
+
+		if p.operation.DryRun {
+			report.Stats.FilesDeleted.Add(1)
+			// Add to differences report
+			p.resultsMu.Lock()
+			diff := models.FileDifference{
+				RelativePath: path,
+				Reason:       models.ReasonDeleted,
+				Details:      "file would be deleted (dry-run)",
+			}
+			if fileInfo != nil {
+				diff.DestInfo = &models.FileInfo{
+					Size:    fileInfo.Size,
+					ModTime: fileInfo.ModTime,
+				}
+			}
+			report.Differences = append(report.Differences, diff)
+			p.resultsMu.Unlock()
+
+			if p.logger != nil {
+				p.logger.Info(ctx, "Would delete orphan file", logging.Fields{
+					"path": path,
+				})
+			}
+			continue
+		}
+
+		if err := p.dest.Delete(ctx, path); err != nil {
+			report.Stats.FilesErrored.Add(1)
+			p.resultsMu.Lock()
+			report.Errors = append(report.Errors, models.SyncError{
+				FilePath:  path,
+				Operation: models.ActionDelete,
+				Error:     err.Error(),
+				Timestamp: time.Now(),
+			})
+			p.resultsMu.Unlock()
+
+			if p.logger != nil {
+				p.logger.Error(ctx, "Failed to delete orphan file", err, logging.Fields{
+					"path": path,
+				})
+			}
+		} else {
+			report.Stats.FilesDeleted.Add(1)
+			// Add to differences report
+			p.resultsMu.Lock()
+			diff := models.FileDifference{
+				RelativePath: path,
+				Reason:       models.ReasonDeleted,
+				Details:      "file deleted from destination",
+			}
+			if fileInfo != nil {
+				diff.DestInfo = &models.FileInfo{
+					Size:    fileInfo.Size,
+					ModTime: fileInfo.ModTime,
+				}
+			}
+			report.Differences = append(report.Differences, diff)
+			p.resultsMu.Unlock()
+
+			if p.logger != nil {
+				p.logger.Info(ctx, "Deleted orphan file", logging.Fields{
+					"path": path,
+				})
+			}
+		}
+	}
+
+	// Delete orphan directories (deepest first)
+	for _, path := range orphanDirs {
+		if p.operation.DryRun {
+			report.Stats.DirsDeleted.Add(1)
+			if p.logger != nil {
+				p.logger.Info(ctx, "Would delete orphan directory", logging.Fields{
+					"path": path,
+				})
+			}
+			continue
+		}
+
+		if err := p.dest.Delete(ctx, path); err != nil {
+			// Ignore errors for non-empty directories (may contain files we didn't delete)
+			if p.logger != nil {
+				p.logger.Debug(ctx, "Could not delete directory (may not be empty)", logging.Fields{
+					"path": path,
+				})
+			}
+		} else {
+			report.Stats.DirsDeleted.Add(1)
+			if p.logger != nil {
+				p.logger.Info(ctx, "Deleted orphan directory", logging.Fields{
+					"path": path,
+				})
+			}
+		}
+	}
+
+	// Remove deleted files from destFiles map so they don't appear in buildReport
+	if !p.operation.DryRun {
+		p.destFilesMu.Lock()
+		for _, path := range orphanFiles {
+			delete(p.destFiles, path)
+		}
+		p.destFilesMu.Unlock()
+	}
 }

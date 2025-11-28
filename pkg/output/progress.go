@@ -884,6 +884,7 @@ func (f *ProgressFormatter) Complete(report *models.SyncReport) error {
 	fmt.Fprintf(f.writer, "  Operations:\n")
 	fmt.Fprintf(f.writer, "    Files copied:       %d\n", report.Stats.FilesCopied.Load())
 	fmt.Fprintf(f.writer, "    Files updated:      %d\n", report.Stats.FilesUpdated.Load())
+	fmt.Fprintf(f.writer, "    Files deleted:      %d\n", report.Stats.FilesDeleted.Load())
 	fmt.Fprintf(f.writer, "    Files synchronized: %d\n", report.Stats.FilesSynchronized.Load())
 	fmt.Fprintf(f.writer, "    Files skipped:      %d\n", report.Stats.FilesSkipped.Load())
 	fmt.Fprintf(f.writer, "    Files errored:      %d\n", report.Stats.FilesErrored.Load())

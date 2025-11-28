@@ -137,6 +137,8 @@ const (
 	ReasonOnlyInSource DifferenceReason = "only_in_source"
 	// ReasonOnlyInDest indicates file exists only in destination (one-way mode)
 	ReasonOnlyInDest DifferenceReason = "only_in_dest"
+	// ReasonDeleted indicates file was deleted from destination
+	ReasonDeleted DifferenceReason = "deleted"
 	// ReasonSkipped indicates file was intentionally skipped
 	ReasonSkipped DifferenceReason = "skipped"
 )
