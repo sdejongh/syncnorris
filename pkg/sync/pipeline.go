@@ -198,14 +198,14 @@ func (p *Pipeline) Run(ctx context.Context) (*models.SyncReport, error) {
 	// Phase 6: Collect results and build report
 	p.buildReport(report)
 
-	// Complete formatter
+	// Finalize report timing
+	report.EndTime = time.Now()
+	report.Duration = report.EndTime.Sub(report.StartTime)
+
+	// Complete formatter (after duration is calculated)
 	if p.formatter != nil {
 		p.formatter.Complete(report)
 	}
-
-	// Finalize report
-	report.EndTime = time.Now()
-	report.Duration = report.EndTime.Sub(report.StartTime)
 
 	if len(report.Errors) > 0 {
 		if int(report.Stats.FilesErrored.Load()) == int(p.totalFiles.Load()) {
