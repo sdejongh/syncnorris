@@ -275,6 +275,27 @@ syncnorris help      # Show help for any command
 --verbose, -v        Verbose debug output
 ```
 
+### Version Command
+
+```bash
+# Show detailed version information
+syncnorris version
+# Output:
+# syncnorris v0.2.0
+#   Commit:     abc1234
+#   Built:      2025-11-28T09:03:07Z
+#   Go version: go1.24.10
+#   OS/Arch:    linux/amd64
+
+# Show only version number
+syncnorris version -s
+# Output: v0.2.0
+
+# Quick version check (Cobra built-in)
+syncnorris --version
+# Output: syncnorris version v0.2.0
+```
+
 #### Non-Functional Flags (Accepted but Not Yet Implemented)
 These flags are accepted for future compatibility but currently have no effect:
 
