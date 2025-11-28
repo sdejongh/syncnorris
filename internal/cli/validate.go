@@ -14,17 +14,26 @@ import (
 
 // validateSyncFlags validates the sync command flags
 func validateSyncFlags() error {
-	// Validate paths exist
+	// Validate source exists
 	if _, err := os.Stat(syncFlags.Source); os.IsNotExist(err) {
 		return fmt.Errorf("source path does not exist: %s", syncFlags.Source)
 	}
 
-	// Destination can not exist yet (will be created), but parent must exist
+	// Check destination
 	destInfo, err := os.Stat(syncFlags.Dest)
-	if err != nil && !os.IsNotExist(err) {
+	if os.IsNotExist(err) {
+		// Destination doesn't exist
+		if syncFlags.CreateDest {
+			// Create destination directory with parents
+			if err := os.MkdirAll(syncFlags.Dest, 0755); err != nil {
+				return fmt.Errorf("failed to create destination directory: %w", err)
+			}
+		} else {
+			return fmt.Errorf("destination path does not exist: %s (use --create-dest to create it)", syncFlags.Dest)
+		}
+	} else if err != nil {
 		return fmt.Errorf("failed to access destination path: %w", err)
-	}
-	if destInfo != nil && !destInfo.IsDir() {
+	} else if !destInfo.IsDir() {
 		return fmt.Errorf("destination path exists but is not a directory: %s", syncFlags.Dest)
 	}
 
