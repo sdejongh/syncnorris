@@ -1,6 +1,6 @@
 # syncnorris
 
-**Version**: 0.1.0-alpha (MVP)
+**Version**: 0.2.0
 **Status**: Production-ready for one-way synchronization
 **License**: MIT
 
@@ -35,23 +35,34 @@ Cross-platform file synchronization utility built in Go, optimized for performan
 
 ### User Interface
 - ✅ **Advanced progress display**
-  - Real-time tabular view of up to 5 concurrent files
+  - Real-time tabular view of up to 5 concurrent files (3 on Windows)
   - Dual progress bars: data transferred + files processed
-  - Status icons: ⏳ copying, 🔍 hashing, ✅ complete, ❌ error
+  - Status icons: 🟢 copying, 🔵 comparing, ✅ complete, ❌ error
+  - Legend displayed at top of progress view
   - Instantaneous transfer rate (3-second sliding window) + average
   - Accurate ETA calculation
   - Terminal width detection (prevents line wrapping)
+  - Optimized for Windows terminals (reduced flicker)
 - ✅ **Human-readable output** with comprehensive summary statistics
 - ✅ **Differences report**
   - `compare` command: always displays differences to screen
   - `sync` command: optional with `--diff-report FILE`
-  - Lists files remaining different after operations
-  - Includes reason for each difference (copy error, hash mismatch, etc.)
+  - **Report always created** even when no differences (v0.2.0)
+  - **Tracks all operations**: copied, updated, synchronized, errors
+  - Includes reason for each difference (only in source, content differs, copy error, etc.)
   - Supports human-readable and JSON formats
   - Shows "No differences found" when fully synchronized
   - JSON output suitable for automation/scripting
 - ✅ **Quiet mode** for scripts (suppress non-error output)
 - ✅ **Verbose mode** for debugging
+
+### Architecture (v0.2.0)
+- ✅ **Producer-Consumer Pipeline**
+  - Scanner (producer) populates task queue while workers process in parallel
+  - Workers start processing before scan completes
+  - Each worker handles complete file lifecycle (verify → compare → copy)
+  - Dynamic progress updates during scan phase
+  - Better memory efficiency (no full operation list in memory)
 
 ### Performance Optimizations
 syncnorris has been heavily optimized and exceeds all performance targets:
@@ -62,6 +73,7 @@ syncnorris has been heavily optimized and exceeds all performance targets:
 - **Parallel hash computation**: Source and destination hashed concurrently
 - **Composite comparison**: Metadata check before expensive hash operations
 - **Buffer pooling**: Reduced GC pressure with sync.Pool
+- **Graceful interrupt handling**: Cursor visibility restored on Ctrl+C (v0.2.0)
 
 **Measured Results**:
 - 10,000 files synchronized in <2 minutes (target: <5 min) ✅
@@ -188,7 +200,7 @@ syncnorris sync -s /src -d /dst --comparison namesize
 ### Parallel Operations
 
 ```bash
-# Use 16 parallel workers (default: CPU count)
+# Use 16 parallel workers (default: 5)
 syncnorris sync -s /src -d /dst --parallel 16
 ```
 
@@ -248,7 +260,7 @@ syncnorris help      # Show help for any command
 ```
 --comparison METHOD  Comparison method: hash, md5, binary, namesize (default: hash)
 --dry-run            Compare only, don't sync
---parallel, -p N     Number of parallel workers (default: CPU count)
+--parallel, -p N     Number of parallel workers (default: 5)
 --mode oneway        Sync mode (only 'oneway' currently supported)
 --diff-report FILE   Write differences report to file (sync command)
                      Note: compare command always displays to screen by default
@@ -354,11 +366,11 @@ syncnorris sync -s /src -d /dst \
 ### Maximum Performance
 
 ```bash
-# Use all CPU cores for parallel operations
+# Use more parallel workers for I/O-bound operations
 syncnorris sync \
   -s /source \
   -d /dest \
-  --parallel $(nproc) \
+  --parallel 16 \
   --comparison namesize
 ```
 
@@ -391,7 +403,7 @@ syncnorris sync \
 4. **Debugging**: Use `--comparison binary` for byte-by-byte verification with exact offset reporting
 5. **Large files**: Hash comparison (SHA-256/MD5) automatically uses partial hashing (≥1MB)
 6. **Network storage**: Mount shares locally rather than waiting for native SMB/NFS support
-7. **Worker count**: Default (CPU count) is optimal for most scenarios
+7. **Worker count**: Default is 5; increase for fast I/O or decrease for slow disks
 8. **Progress overhead**: Already optimized (93% reduction), no tuning needed
 
 ## Project Structure

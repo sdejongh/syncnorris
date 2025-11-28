@@ -1,19 +1,20 @@
 # Implementation Status - syncnorris
 
 **Last Updated**: 2025-11-28
-**Version**: 0.1.0-alpha (MVP Released)
+**Version**: 0.2.0
 **Branch**: master (merged from 001-file-sync-utility)
 
 ## Executive Summary
 
-syncnorris is currently in **MVP/Alpha** state with core one-way synchronization functionality fully implemented and heavily optimized for performance. The tool is production-ready for one-way sync scenarios with hash, MD5, binary, or name/size comparison.
+syncnorris v0.2.0 features a **refactored producer-consumer pipeline architecture** with core one-way synchronization functionality fully implemented and heavily optimized for performance. The tool is production-ready for one-way sync scenarios with hash, MD5, binary, or name/size comparison.
 
 ### Quick Stats
-- **Lines of Code**: ~4,825 Go lines across 30 files
+- **Lines of Code**: ~5,500 Go lines across 32 files
 - **Packages**: 7 in pkg/, 2 in internal/
 - **Dependencies**: 4 direct (Cobra, pb/v3, UUID, YAML)
 - **Platforms**: Linux, Windows, macOS (amd64, arm64)
 - **License**: MIT
+- **Default Workers**: 5 (configurable via --parallel)
 
 ## Fully Implemented Features ✅
 
@@ -45,13 +46,14 @@ syncnorris is currently in **MVP/Alpha** state with core one-way synchronization
 ### Output & Display
 - ✅ **Human-readable output**
   - Real-time progress bars (data + files)
-  - Tabular file display (up to 5 concurrent files)
+  - Tabular file display (up to 5 concurrent files, 3 on Windows)
   - Status icons: 🟢 copying, 🔵 comparing, ✅ complete, ❌ error
   - Legend displayed at top of progress view
   - Alphabetically sorted file list
   - Instantaneous transfer rate (3-second sliding window)
   - Average transfer rate and ETA
   - Terminal width detection (prevents line wrapping)
+  - Windows optimization: 300ms update interval, reduced flicker
 - ✅ **Progress display**
   - Throttled callbacks (93% overhead reduction)
   - Smooth visual updates (max 20/sec per file)
@@ -78,6 +80,7 @@ syncnorris is currently in **MVP/Alpha** state with core one-way synchronization
 - ✅ **Parallel file comparisons** (worker pool architecture)
 - ✅ **Metadata preservation** (timestamps, permissions)
 - ✅ **Composite comparison strategy** (10-40x faster re-sync)
+- ✅ **Graceful interrupt handling** (cursor visibility restored on Ctrl+C)
 
 ### Configuration
 - ✅ **Config file support** (YAML format)
@@ -197,7 +200,9 @@ All performance goals met or exceeded:
 --comparison binary  # Byte-by-byte binary comparison
 --comparison namesize  # Name+size only comparison
 --dry-run          # Preview changes without syncing
---parallel, -p     # Number of parallel workers
+--parallel, -p     # Number of parallel workers (default: 5)
+--diff-report      # Write differences report to file
+--diff-format      # Report format: human, json
 --output human     # Human-readable output (only working format)
 --quiet, -q        # Suppress non-error output
 --verbose, -v      # Verbose output
@@ -293,7 +298,7 @@ gopkg.in/yaml.v3              v3.0.1   // YAML parsing - USED
 
 ### Priority 2 (Production Readiness)
 1. Implement bidirectional sync with conflict resolution
-2. Add timestamp and binary comparison methods
+2. Add timestamp comparison method (binary already implemented)
 3. Implement resume/checkpoint functionality
 4. Add integration tests and CI/CD
 
@@ -305,9 +310,10 @@ gopkg.in/yaml.v3              v3.0.1   // YAML parsing - USED
 
 ## Version Roadmap
 
-- **v0.1.0 (Current)**: MVP - One-way sync with hash/MD5/binary/namesize comparison ✅
-- **v0.2.0**: JSON output, exclude patterns, timestamp comparison, bandwidth limiting
-- **v0.3.0**: Bidirectional sync, conflict resolution, resume functionality
+- **v0.1.0**: MVP - One-way sync with hash/MD5/binary/namesize comparison ✅
+- **v0.2.0 (Current)**: Producer-consumer pipeline, Windows optimization, enhanced differences report ✅
+- **v0.3.0**: JSON output, exclude patterns, timestamp comparison, bandwidth limiting
+- **v0.4.0**: Bidirectional sync, conflict resolution, resume functionality
 - **v1.0.0**: Production-ready with comprehensive tests, logging infrastructure
 - **v2.0.0**: Advanced features (network backends, S3, incremental binary diff)
 
