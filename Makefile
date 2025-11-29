@@ -30,6 +30,24 @@ build-all:
 test:
 	go test ./... -v -race -coverprofile=coverage.out
 
+.PHONY: test-short
+test-short:
+	go test ./... -short
+
+.PHONY: test-coverage
+test-coverage:
+	go test ./... -coverprofile=coverage.out
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report: coverage.html"
+
+.PHONY: test-unit
+test-unit:
+	go test ./pkg/... -v -race
+
+.PHONY: test-integration
+test-integration:
+	go test ./tests/... -v -race
+
 .PHONY: lint
 lint:
 	go vet ./...
