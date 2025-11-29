@@ -1,8 +1,38 @@
 # Changelog - syncnorris
 
+## [0.5.0] - 2025-11-29
+
+### Test Coverage
+
+#### Comprehensive Test Suite
+- **Unit tests for bidirectional sync** (`pkg/sync/bidirectional_test.go`)
+  - All conflict resolution modes: newer, source-wins, dest-wins, both
+  - Context cancellation handling
+  - Dry-run mode verification
+  - Stateful mode with persistent state
+- **Unit tests for state management** (`pkg/sync/state_test.go`)
+  - State persistence (save/load)
+  - Change detection (created, modified, deleted, none)
+  - File state tracking
+- **Edge case tests**:
+  - Symlinks handling
+  - File permissions (executable, read-only, unreadable)
+  - Large files (5MB+)
+  - Empty files
+  - Many small files (100+ files)
+  - Deep nested directories (10+ levels)
+  - Special characters in filenames
+- **Integration tests** (`tests/integration/sync_test.go`)
+  - One-way sync scenarios
+  - Bidirectional sync scenarios
+- **Files Created/Modified**:
+  - `pkg/sync/bidirectional_test.go` (new)
+  - `pkg/sync/state_test.go` (new)
+  - `tests/integration/sync_test.go` (enhanced)
+
 ## [0.4.0] - 2025-11-29
 
-### Bug Fixes & Improvements (2025-11-29)
+### Bug Fixes & Improvements
 
 #### Fixed `--conflict both` Mode
 - **Issue**: Both mode was creating conflict copies but not syncing original files between sides
@@ -39,7 +69,7 @@
 
 ### New Features
 
-#### Bidirectional Synchronization
+#### Bidirectional Synchronization (EXPERIMENTAL)
 - **Implementation**: Full two-way sync between source and destination
   - Files created in source are copied to destination
   - Files created in destination are copied to source
@@ -48,9 +78,7 @@
 - **CLI**: `--mode bidirectional` (or `-m bidirectional`)
 - **Files Created**:
   - `pkg/sync/state.go` (new state management for tracking sync history)
-  - `pkg/sync/bidirectional.go` (new bidirectional pipeline)
-- **Files Modified**:
-  - `pkg/sync/engine.go` (added runBidirectional() method)
+  - `pkg/sync/bidirectional.go` (bidirectional sync pipeline - 1071 lines)
 
 #### Conflict Detection and Resolution
 - **Implementation**: Intelligent conflict detection with multiple resolution strategies

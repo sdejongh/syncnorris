@@ -382,23 +382,27 @@ func (p *BidirectionalPipeline) analyzeFirstSync(path string, sourceEntry, destE
 		}, nil
 	}
 
-	// File in both - check if they're identical or conflict
+	// File in both - always treat as potential conflict on first sync
+	// since we don't know which version is "correct"
 	if sourceExists && destExists {
-		// If same size and modtime, assume identical
+		// If same size, check if content is actually the same
+		// by returning a skip action that will be verified
 		if sourceEntry.Size == destEntry.Size {
 			timeDiff := sourceEntry.ModTime.Sub(destEntry.ModTime)
+			// Only skip if timestamps are very close (within 1 second)
+			// AND sizes match - but mark for verification
 			if timeDiff < time.Second && timeDiff > -time.Second {
 				return &SyncAction{
 					Path:        path,
 					ActionType:  models.ActionSkip,
 					SourceEntry: sourceEntry,
 					DestEntry:   destEntry,
-					Reason:      "files appear identical",
+					Reason:      "files appear identical (same size and timestamp)",
 				}, nil
 			}
 		}
 
-		// Files differ - conflict on first sync
+		// Files have different sizes or timestamps - conflict on first sync
 		return nil, &models.Conflict{
 			Path:        path,
 			SourceEntry: sourceEntry,

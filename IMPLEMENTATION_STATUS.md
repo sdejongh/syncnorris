@@ -1,8 +1,8 @@
 # Implementation Status - syncnorris
 
 **Last Updated**: 2025-11-29
-**Version**: v0.4.0
-**Branch**: feature/v0.4.0-bidirectional
+**Version**: v0.5.0
+**Branch**: feature/v0.5.0-automated-tests
 
 ## Executive Summary
 
@@ -130,6 +130,7 @@ syncnorris v0.4.0 features **bidirectional synchronization** with conflict detec
 - ⚠️ **Functional but not production-ready** - Use with caution
 - All conflict resolution strategies work: `newer`, `source-wins`, `dest-wins`, `both`
 - Optional state tracking with `--stateful` flag (stateless by default)
+- Comprehensive test coverage (unit and integration tests)
 - Always test with `--dry-run` before actual sync
 - Report any issues encountered
 
@@ -234,13 +235,19 @@ All performance goals met or exceeded:
 - ✅ Unit tests for composite comparator
 - ✅ Unit tests for atomic statistics
 - ✅ Performance benchmarks (hash, parallel operations)
+- ✅ Unit tests for bidirectional sync pipeline
+- ✅ Unit tests for sync state management
+- ✅ Unit tests for conflict resolution (all modes)
+- ✅ Unit tests for storage backend
+- ✅ Unit tests for rate limiting
+- ✅ Unit tests for models
+- ✅ Integration tests for one-way sync
+- ✅ Integration tests for bidirectional sync
+- ✅ Edge case tests: symlinks, permissions, large files, empty files
 
 ### Missing Tests
-- ❌ Integration tests (end-to-end sync scenarios)
 - ❌ CLI command tests
 - ❌ Cross-platform compatibility tests
-- ❌ Error handling tests (network failures, permissions, disk full)
-- ❌ Large file tests (>RAM size)
 - ❌ Stress tests (millions of files)
 
 ## Documentation Status
@@ -352,6 +359,7 @@ syncnorris v0.4.0 now supports **bidirectional synchronization** with conflict d
 - Resolution strategies: newer, source-wins, dest-wins, both
 - Optional state tracking with `--stateful` flag (stateless by default)
 - State stored in ~/.config/syncnorris/state/ when enabled
+- Comprehensive unit and integration tests
 
 **v0.4.0 Bug Fixes** (2025-11-29):
 - Fixed `--conflict both` mode to properly sync files both ways

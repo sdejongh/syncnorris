@@ -1,6 +1,6 @@
 # syncnorris
 
-**Version**: v0.4.0
+**Version**: v0.5.0
 **Status**: Production-ready for one-way sync | **Experimental** for bidirectional sync
 **License**: MIT
 
@@ -622,9 +622,8 @@ Contributions are welcome! Priority areas:
 
 1. Testing and feedback on bidirectional sync
 2. Resume interrupted operations
-3. Integration tests
-4. Logging infrastructure
-5. Documentation improvements
+3. Logging infrastructure
+4. Documentation improvements
 
 ## License
 
