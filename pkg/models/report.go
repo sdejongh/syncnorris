@@ -13,6 +13,7 @@ type SyncReport struct {
 	DestPath    string
 	Mode        SyncMode
 	DryRun      bool
+	Stateful    bool // Whether state tracking is enabled for bidirectional sync
 
 	// Timing
 	StartTime time.Time

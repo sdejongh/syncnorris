@@ -65,6 +65,7 @@ func (p *BidirectionalPipeline) Run(ctx context.Context) (*models.SyncReport, er
 		DestPath:    p.operation.DestPath,
 		Mode:        p.operation.Mode,
 		DryRun:      p.operation.DryRun,
+		Stateful:    p.operation.Stateful,
 		StartTime:   startTime,
 		Status:      models.StatusSuccess,
 	}

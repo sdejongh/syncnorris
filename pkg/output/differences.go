@@ -66,6 +66,13 @@ func writeDifferencesHuman(report *models.SyncReport, w io.Writer) error {
 	fmt.Fprintf(w, "Source: %s\n", report.SourcePath)
 	fmt.Fprintf(w, "Destination: %s\n", report.DestPath)
 	fmt.Fprintf(w, "Mode: %s\n", report.Mode)
+	if report.Mode == models.ModeBidirectional {
+		if report.Stateful {
+			fmt.Fprintf(w, "State Tracking: enabled (changes tracked between syncs)\n")
+		} else {
+			fmt.Fprintf(w, "State Tracking: disabled (stateless mode)\n")
+		}
+	}
 	fmt.Fprintf(w, "Dry Run: %v\n\n", report.DryRun)
 
 	fmt.Fprintf(w, "Total Differences: %d\n", len(report.Differences))
@@ -160,20 +167,22 @@ func writeDifferencesHuman(report *models.SyncReport, w io.Writer) error {
 // writeDifferencesJSON writes differences in JSON format
 func writeDifferencesJSON(report *models.SyncReport, w io.Writer) error {
 	output := struct {
-		Generated      string                   `json:"generated"`
-		SourcePath     string                   `json:"source_path"`
-		DestPath       string                   `json:"dest_path"`
-		Mode           string                   `json:"mode"`
-		DryRun         bool                     `json:"dry_run"`
-		TotalCount     int                      `json:"total_count"`
-		ConflictCount  int                      `json:"conflict_count"`
-		Differences    []models.FileDifference  `json:"differences"`
-		Conflicts      []models.Conflict        `json:"conflicts,omitempty"`
+		Generated     string                  `json:"generated"`
+		SourcePath    string                  `json:"source_path"`
+		DestPath      string                  `json:"dest_path"`
+		Mode          string                  `json:"mode"`
+		Stateful      bool                    `json:"stateful"`
+		DryRun        bool                    `json:"dry_run"`
+		TotalCount    int                     `json:"total_count"`
+		ConflictCount int                     `json:"conflict_count"`
+		Differences   []models.FileDifference `json:"differences"`
+		Conflicts     []models.Conflict       `json:"conflicts,omitempty"`
 	}{
 		Generated:     time.Now().Format(time.RFC3339),
 		SourcePath:    report.SourcePath,
 		DestPath:      report.DestPath,
 		Mode:          string(report.Mode),
+		Stateful:      report.Stateful,
 		DryRun:        report.DryRun,
 		TotalCount:    len(report.Differences),
 		ConflictCount: len(report.Conflicts),
