@@ -989,21 +989,45 @@ func (p *BidirectionalPipeline) reportDryRunAction(action *SyncAction, report *m
 			reason = models.ReasonOnlyInDest
 		}
 		details = fmt.Sprintf("would copy %s (%s)", action.Path, action.Direction)
+		report.Stats.FilesCopied.Add(1)
+		// Estimate bytes that would be transferred
+		if action.SourceEntry != nil {
+			report.Stats.BytesTransferred.Add(action.SourceEntry.Size)
+		} else if action.DestEntry != nil {
+			report.Stats.BytesTransferred.Add(action.DestEntry.Size)
+		}
 
 	case models.ActionUpdate:
 		reason = models.ReasonContentDiff
 		details = fmt.Sprintf("would update %s (%s)", action.Path, action.Direction)
+		report.Stats.FilesUpdated.Add(1)
+		// Estimate bytes that would be transferred
+		if action.Direction == DirectionSourceToDest && action.SourceEntry != nil {
+			report.Stats.BytesTransferred.Add(action.SourceEntry.Size)
+		} else if action.Direction == DirectionDestToSource && action.DestEntry != nil {
+			report.Stats.BytesTransferred.Add(action.DestEntry.Size)
+		}
 
 	case models.ActionDelete:
 		reason = models.ReasonDeleted
-		details = fmt.Sprintf("would delete %s (dry-run)", action.Path)
+		details = fmt.Sprintf("would delete %s", action.Path)
+		report.Stats.FilesDeleted.Add(1)
 
 	case models.ActionSkip:
-		return // Don't report skipped files
+		report.Stats.FilesSynchronized.Add(1)
+		return // Don't report skipped files in differences
 
 	case models.ActionConflict:
 		reason = models.ReasonContentDiff
 		details = "conflict: would keep both files"
+		report.Stats.FilesUpdated.Add(1)
+		// Estimate bytes for both directions
+		if action.SourceEntry != nil {
+			report.Stats.BytesTransferred.Add(action.SourceEntry.Size)
+		}
+		if action.DestEntry != nil {
+			report.Stats.BytesTransferred.Add(action.DestEntry.Size)
+		}
 	}
 
 	p.resultsMu.Lock()
