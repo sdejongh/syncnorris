@@ -215,6 +215,7 @@ func createSyncOperation(cfg *config.Config) (*models.SyncOperation, error) {
 		MaxWorkers:         cfg.Performance.MaxWorkers,
 		BandwidthLimit:     cfg.Performance.BandwidthLimit,
 		BufferSize:         cfg.Performance.BufferSize,
+		Stateful:           syncFlags.Stateful,
 		CreatedAt:          time.Now(),
 	}
 

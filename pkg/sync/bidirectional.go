@@ -69,11 +69,16 @@ func (p *BidirectionalPipeline) Run(ctx context.Context) (*models.SyncReport, er
 		Status:      models.StatusSuccess,
 	}
 
-	// Load previous state
+	// Load previous state (only if stateful mode is enabled)
 	var err error
-	p.state, err = LoadState(p.operation.SourcePath, p.operation.DestPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load sync state: %w", err)
+	if p.operation.Stateful {
+		p.state, err = LoadState(p.operation.SourcePath, p.operation.DestPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load sync state: %w", err)
+		}
+	} else {
+		// Stateless mode: create empty state (treats everything as first sync)
+		p.state = NewSyncState(p.operation.SourcePath, p.operation.DestPath)
 	}
 
 	// Initialize rate limiter if bandwidth limit is set
@@ -112,8 +117,8 @@ func (p *BidirectionalPipeline) Run(ctx context.Context) (*models.SyncReport, er
 		report.Status = models.StatusPartial
 	}
 
-	// Update state if not dry-run
-	if !p.operation.DryRun {
+	// Update state if stateful mode and not dry-run
+	if p.operation.Stateful && !p.operation.DryRun {
 		p.state.MarkSyncComplete()
 		if err := p.state.Save(); err != nil {
 			// Log error but don't fail the sync
@@ -723,6 +728,12 @@ func (p *BidirectionalPipeline) executeAction(ctx context.Context, action *SyncA
 
 	case models.ActionSkip:
 		report.Stats.FilesSynchronized.Add(1)
+		// Update state for skipped files (they're already in sync)
+		if action.SourceEntry != nil {
+			p.updateStateForFile(action.Path, action.SourceEntry, true, true)
+		} else if action.DestEntry != nil {
+			p.updateStateForFile(action.Path, action.DestEntry, true, true)
+		}
 		return nil
 
 	case models.ActionConflict:

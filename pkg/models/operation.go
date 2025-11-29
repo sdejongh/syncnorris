@@ -60,6 +60,7 @@ type SyncOperation struct {
 	MaxWorkers         int
 	BandwidthLimit     int64 // bytes per second, 0 = unlimited
 	BufferSize         int
+	Stateful           bool  // Save state for bidirectional sync (enables change tracking)
 	CreatedAt          time.Time
 	StartedAt          *time.Time
 	CompletedAt        *time.Time

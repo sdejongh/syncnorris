@@ -29,6 +29,7 @@ type SyncFlags struct {
 	Output       string
 	DiffReport   string
 	DiffFormat   string
+	Stateful     bool
 }
 
 var syncFlags SyncFlags
@@ -62,6 +63,7 @@ Supports one-way and bidirectional sync with multiple comparison methods.`,
 	cmd.Flags().StringVarP(&syncFlags.Output, "output", "o", "human", "output format: human, json")
 	cmd.Flags().StringVar(&syncFlags.DiffReport, "diff-report", "", "write differences report to file")
 	cmd.Flags().StringVar(&syncFlags.DiffFormat, "diff-format", "human", "differences report format: human, json")
+	cmd.Flags().BoolVar(&syncFlags.Stateful, "stateful", false, "save sync state for bidirectional mode (enables change tracking between syncs)")
 
 	return cmd
 }
