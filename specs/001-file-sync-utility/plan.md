@@ -1,8 +1,8 @@
 # Implementation Plan: File Synchronization Utility
 
-**Branch**: `master` (merged from `001-file-sync-utility`) | **Last Updated**: 2025-11-28 | **Spec**: [spec.md](spec.md)
-**Current Version**: v0.3.0
-**Status**: Production-ready for one-way synchronization
+**Branch**: `master` (merged from `001-file-sync-utility`) | **Last Updated**: 2025-11-29 | **Spec**: [spec.md](spec.md)
+**Current Version**: v0.4.0
+**Status**: Production-ready for one-way sync | Experimental bidirectional sync
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/commands/plan.md` for the execution workflow.
 
@@ -94,7 +94,7 @@ syncnorris/
 |------------|----------|--------|---------|
 | US1: One-way Sync | P1 | ✅ **COMPLETE** | Full implementation with optimizations |
 | US2: Folder Comparison | P2 | ✅ **COMPLETE** | compare command, dry-run, diff reports |
-| US3: Bidirectional Sync | P3 | ❌ **NOT STARTED** | Returns error, no implementation |
+| US3: Bidirectional Sync | P3 | ⚠️ **EXPERIMENTAL** | Functional but not production-ready (v0.4.0) |
 | US4: Multiple Comparisons | P4 | ✅ **COMPLETE** | All 5 methods (hash, md5, binary, namesize, timestamp) |
 | US5: JSON Output | P5 | ✅ **COMPLETE** | JSON formatter implemented (v0.3.0) |
 
@@ -110,7 +110,44 @@ All performance targets met or exceeded:
 
 ---
 
-## Recent Updates (2025-11-28 v0.3.0)
+## Recent Updates (2025-11-29 v0.4.0)
+
+### v0.4.0 Bidirectional Synchronization (EXPERIMENTAL) ⚠️
+
+> **Warning**: Bidirectional sync is functional but not production-ready. Always test with `--dry-run` first!
+
+#### New Features
+- **Bidirectional Sync** (`--mode bidirectional`): Two-way sync between source and destination
+- **Conflict Detection**: Detects modify-modify, delete-modify, create-create conflicts
+- **Conflict Resolution** (`--conflict`):
+  - `newer` (default): Use most recently modified version
+  - `source-wins`: Always prefer source version
+  - `dest-wins`: Always prefer destination version
+  - `both`: Keep both versions with `.source-conflict`/`.dest-conflict` suffix
+- **Optional State Tracking** (`--stateful`): Track changes between syncs
+
+#### v0.4.0 Bug Fixes (2025-11-29)
+- Fixed `--conflict both` mode to properly sync files both ways
+- Fixed dry-run mode counters showing zeros
+- Removed unimplemented `--conflict ask` option
+- Added `--stateful` flag for optional state persistence (stateless by default)
+- Enhanced conflict reports with winner, result description, and stateful info
+
+#### New Files
+- `pkg/sync/state.go`: State management for tracking sync history
+- `pkg/sync/bidirectional.go`: Bidirectional pipeline implementation
+
+#### Modified Files
+- `pkg/models/conflict.go`: Added Winner, ResultDescription, ConflictFiles fields
+- `pkg/models/operation.go`: Added Stateful field
+- `pkg/models/report.go`: Added Stateful field
+- `pkg/output/differences.go`: Enhanced conflict reporting, stateful info
+- `internal/cli/sync.go`: Added --stateful flag, removed --conflict ask
+- `internal/cli/validate.go`: Updated conflict validation
+
+---
+
+## Previous Updates (2025-11-28 v0.3.0)
 
 ### v0.3.0 New Features ✅
 

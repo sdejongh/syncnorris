@@ -1,7 +1,7 @@
 # syncnorris
 
-**Version**: v0.3.0
-**Status**: Production-ready for one-way synchronization
+**Version**: v0.4.0
+**Status**: Production-ready for one-way sync | **Experimental** for bidirectional sync
 **License**: MIT
 
 Cross-platform file synchronization utility built in Go, optimized for performance with advanced hash comparison and parallel operations.
@@ -9,12 +9,23 @@ Cross-platform file synchronization utility built in Go, optimized for performan
 ## Current Features ✅
 
 ### Core Functionality
-- ✅ **One-way synchronization** from source to destination
+- ✅ **One-way synchronization** from source to destination (production-ready)
   - Local filesystem support (mounted network shares work)
   - Parallel file transfers (configurable worker count)
   - Dry-run mode to preview changes without modifying files
   - Incremental sync (only changed files are transferred)
   - **Delete orphan files** (`--delete`): Remove files from destination that don't exist in source
+
+- ⚠️ **Bidirectional synchronization** (EXPERIMENTAL - v0.4.0)
+  - Two-way sync between source and destination
+  - **Conflict detection**: modify-modify, delete-modify, create-create
+  - **Conflict resolution strategies**:
+    - `newer`: Use most recently modified version (default)
+    - `source-wins`: Always prefer source version
+    - `dest-wins`: Always prefer destination version
+    - `both`: Keep both versions with `.source-conflict`/`.dest-conflict` suffix
+  - **Optional state tracking** (`--stateful`): Track changes between syncs
+  - ⚠️ **Use with caution**: Always test with `--dry-run` first!
 
 ### Comparison Methods
 - ✅ **Hash-based comparison** (SHA-256, default and recommended)
@@ -110,7 +121,6 @@ syncnorris has been heavily optimized and exceeds all performance targets:
 
 These features are **NOT yet implemented** but are planned for future releases:
 
-- 🚧 **Bidirectional synchronization** with conflict resolution
 - 🚧 **Logging** to files (JSON, plain text)
 - 🚧 **Resume interrupted operations**
 - 🚧 **Native network storage** (SMB/Samba, NFS without mounting)
@@ -205,6 +215,25 @@ syncnorris sync -s /src -d /dst
 syncnorris sync -s /src -d /dst --dry-run
 ```
 
+### Bidirectional Sync (EXPERIMENTAL)
+
+```bash
+# ⚠️ ALWAYS test with --dry-run first!
+syncnorris sync -s /src -d /dst --mode bidirectional --dry-run
+
+# Two-way sync with default conflict resolution (newer wins)
+syncnorris sync -s /src -d /dst --mode bidirectional
+
+# Use source-wins conflict resolution
+syncnorris sync -s /src -d /dst --mode bidirectional --conflict source-wins
+
+# Keep both versions on conflict
+syncnorris sync -s /src -d /dst --mode bidirectional --conflict both
+
+# Enable state tracking between syncs
+syncnorris sync -s /src -d /dst --mode bidirectional --stateful
+```
+
 ### Fast Metadata-Only Comparison
 
 ```bash
@@ -294,6 +323,11 @@ syncnorris help      # Show help for any command
 --output FORMAT      Output format: human, json (default: human)
 --exclude PATTERN    Glob patterns to exclude (can be repeated)
 --bandwidth, -b      Bandwidth limit (e.g., "10M", "1G")
+
+# BIDIRECTIONAL FLAGS (experimental)
+--mode bidirectional Two-way sync between source and destination
+--conflict STRATEGY  Conflict resolution: newer, source-wins, dest-wins, both (default: newer)
+--stateful           Enable state persistence between syncs (tracks changes)
 ```
 
 #### Global Flags
@@ -324,13 +358,6 @@ syncnorris --version
 # Output: syncnorris version v0.2.0
 ```
 
-#### Non-Functional Flags (Accepted but Not Yet Implemented)
-These flags are accepted for future compatibility but currently have no effect:
-
-```
---mode bidirectional      # Returns error: not yet implemented
---conflict STRATEGY       # Not yet implemented (bidirectional only)
-```
 
 ## Examples
 
@@ -582,7 +609,7 @@ go test -bench=. ./pkg/compare/
 
 ## Known Limitations
 
-1. **Bidirectional sync** is not yet implemented (returns error)
+1. **Bidirectional sync** is EXPERIMENTAL - functional but not production-ready
 2. **Network storage** requires mounting (no native SMB/NFS/UNC support yet)
 3. **Interrupted operations** cannot be resumed (no checkpointing)
 4. **Logging** to files is not yet implemented
@@ -593,7 +620,7 @@ See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for complete list.
 
 Contributions are welcome! Priority areas:
 
-1. Bidirectional sync with conflict resolution
+1. Testing and feedback on bidirectional sync
 2. Resume interrupted operations
 3. Integration tests
 4. Logging infrastructure

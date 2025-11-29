@@ -1,6 +1,41 @@
 # Changelog - syncnorris
 
-## [0.4.0] - 2025-11-28
+## [0.4.0] - 2025-11-29
+
+### Bug Fixes & Improvements (2025-11-29)
+
+#### Fixed `--conflict both` Mode
+- **Issue**: Both mode was creating conflict copies but not syncing original files between sides
+- **Fix**: Reorganized logic to:
+  1. Save both versions as conflict copies BEFORE any overwrites
+  2. Use conflict copies to sync files to the opposite side
+  3. Skip directories (only process regular files)
+- **Files Modified**: `pkg/sync/bidirectional.go`
+
+#### Fixed Dry-Run Counters
+- **Issue**: Dry-run mode showed zeros for all operation counters
+- **Fix**: `reportDryRunAction()` now properly increments stats for copy, update, delete, and skip actions
+- **Files Modified**: `pkg/sync/bidirectional.go`
+
+#### Removed `--conflict ask` Option
+- **Issue**: The `ask` strategy was not implemented (just skipped conflicts silently)
+- **Fix**: Removed from CLI, changed default from `ask` to `newer`
+- **Files Modified**: `internal/cli/sync.go`, `internal/cli/validate.go`
+
+#### Added `--stateful` Flag
+- **Implementation**: State persistence is now optional for bidirectional sync
+  - By default, bisync is **stateless** (no state saved between syncs)
+  - With `--stateful`, state is saved to `~/.config/syncnorris/state/`
+  - Stateful mode enables tracking changes between syncs (detect modifications vs creations)
+- **Files Modified**: `internal/cli/sync.go`, `internal/cli/validate.go`, `pkg/sync/bidirectional.go`
+
+#### Enhanced Conflict Reports
+- **New fields in Conflict model**:
+  - `Winner`: Indicates which side won the conflict (source, dest, or both)
+  - `ResultDescription`: Human-readable description of the resolution outcome
+  - `ConflictFiles`: List of any additional files created (for `both` mode)
+- **Stateful/Stateless info** added to both human and JSON diff reports
+- **Files Modified**: `pkg/models/conflict.go`, `pkg/models/operation.go`, `pkg/models/report.go`, `pkg/output/differences.go`
 
 ### New Features
 
@@ -29,7 +64,6 @@
     - `source-wins`: Always prefer source version
     - `dest-wins`: Always prefer destination version
     - `both`: Keep both versions with suffix (`.source-conflict`, `.dest-conflict`)
-    - `ask`: Skip conflicts for manual resolution (future feature)
 - **CLI**: `--conflict STRATEGY` (default: `newer`)
 - **Files Modified**:
   - Uses existing models from `pkg/models/conflict.go`

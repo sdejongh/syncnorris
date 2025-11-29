@@ -1,12 +1,14 @@
 # Implementation Status - syncnorris
 
-**Last Updated**: 2025-11-28
+**Last Updated**: 2025-11-29
 **Version**: v0.4.0
 **Branch**: feature/v0.4.0-bidirectional
 
 ## Executive Summary
 
-syncnorris v0.4.0 features **bidirectional synchronization** with conflict detection and resolution. The tool now supports both one-way and bidirectional sync scenarios. v0.4.0 adds **bidirectional sync**, **conflict resolution strategies** (newer, source-wins, dest-wins, both), and **state tracking** for change detection between syncs.
+syncnorris v0.4.0 features **bidirectional synchronization** with conflict detection and resolution. The tool now supports both one-way and bidirectional sync scenarios. v0.4.0 adds **bidirectional sync**, **conflict resolution strategies** (newer, source-wins, dest-wins, both), and **optional state tracking** for change detection between syncs.
+
+> ⚠️ **Note**: Bidirectional sync is **EXPERIMENTAL** - functional but not yet production-ready. Use with caution and always test with `--dry-run` first.
 
 ### Quick Stats
 - **Lines of Code**: ~5,500 Go lines across 32 files
@@ -122,12 +124,14 @@ syncnorris v0.4.0 features **bidirectional synchronization** with conflict detec
 - ✅ **Makefile** with build targets
 - ✅ **Version embedding** in binary
 
-## Partially Implemented Features ⚠️
+## Experimental Features ⚠️
 
-### CLI Flags Defined But Not Functional
-These flags are accepted by the CLI but have no effect:
-
-- ⚠️ **--conflict ask** - Ask strategy requires interactive mode (not implemented)
+### Bidirectional Synchronization (v0.4.0)
+- ⚠️ **Functional but not production-ready** - Use with caution
+- All conflict resolution strategies work: `newer`, `source-wins`, `dest-wins`, `both`
+- Optional state tracking with `--stateful` flag (stateless by default)
+- Always test with `--dry-run` before actual sync
+- Report any issues encountered
 
 ## Not Yet Implemented ❌
 
@@ -217,8 +221,10 @@ All performance goals met or exceeded:
 --verbose, -v      # Verbose output
 --config           # Config file path
 
-# NON-FUNCTIONAL FLAGS (accepted but partially ignored)
---conflict ask            # Requires interactive mode (not implemented)
+# BIDIRECTIONAL FLAGS (experimental)
+--mode bidirectional  # Two-way sync (experimental)
+--conflict STRATEGY   # Resolution: newer, source-wins, dest-wins, both
+--stateful            # Enable state persistence between syncs
 ```
 
 ## Test Coverage
@@ -338,15 +344,24 @@ gopkg.in/yaml.v3              v3.0.1   // YAML parsing - USED
 
 ## Conclusion
 
-syncnorris v0.4.0 now supports **bidirectional synchronization** with conflict detection and multiple resolution strategies. The tool is production-ready for both one-way and bidirectional sync scenarios.
+syncnorris v0.4.0 now supports **bidirectional synchronization** with conflict detection and multiple resolution strategies. **One-way sync is production-ready**, while **bidirectional sync is experimental** (functional but use with caution).
 
 **Key Features Added in v0.4.0**:
-- Bidirectional sync (source ↔ destination)
+- Bidirectional sync (source ↔ destination) - **EXPERIMENTAL**
 - Conflict detection (modify-modify, delete-modify, create-create)
 - Resolution strategies: newer, source-wins, dest-wins, both
-- State tracking between syncs (stored in ~/.config/syncnorris/state/)
+- Optional state tracking with `--stateful` flag (stateless by default)
+- State stored in ~/.config/syncnorris/state/ when enabled
+
+**v0.4.0 Bug Fixes** (2025-11-29):
+- Fixed `--conflict both` mode to properly sync files both ways
+- Fixed dry-run mode counters showing zeros
+- Removed unimplemented `--conflict ask` option
+- Added `--stateful` flag for optional state persistence
+- Enhanced conflict reports with winner, result description, and stateful info
 
 **Recommendations**:
-1. Add comprehensive unit and integration tests before v1.0.0
-2. Implement logging infrastructure for production use
-3. Implement resume functionality for interrupted operations
+1. Always test bidirectional sync with `--dry-run` first
+2. Add comprehensive unit and integration tests before v1.0.0
+3. Implement logging infrastructure for production use
+4. Implement resume functionality for interrupted operations
