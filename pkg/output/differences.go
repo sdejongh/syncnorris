@@ -221,12 +221,34 @@ func writeConflictsHuman(conflicts []models.Conflict, w io.Writer) {
 		fmt.Fprintf(w, "\n  %s:\n", typeLabels[ctype])
 		for _, c := range cs {
 			fmt.Fprintf(w, "    %s\n", c.Path)
-			fmt.Fprintf(w, "      Resolution: %s -> %s\n", c.Resolution, c.ResolvedAction)
+
+			// Before resolution state
+			fmt.Fprintf(w, "      Before resolution:\n")
 			if c.SourceEntry != nil {
-				fmt.Fprintf(w, "      Source:  %s, %s\n", formatBytes(c.SourceEntry.Size), c.SourceEntry.ModTime.Format(time.RFC3339))
+				fmt.Fprintf(w, "        Source: %s, modified %s\n", formatBytes(c.SourceEntry.Size), c.SourceEntry.ModTime.Format(time.RFC3339))
+			} else {
+				fmt.Fprintf(w, "        Source: (deleted)\n")
 			}
 			if c.DestEntry != nil {
-				fmt.Fprintf(w, "      Dest:    %s, %s\n", formatBytes(c.DestEntry.Size), c.DestEntry.ModTime.Format(time.RFC3339))
+				fmt.Fprintf(w, "        Dest:   %s, modified %s\n", formatBytes(c.DestEntry.Size), c.DestEntry.ModTime.Format(time.RFC3339))
+			} else {
+				fmt.Fprintf(w, "        Dest:   (deleted)\n")
+			}
+
+			// Resolution details
+			fmt.Fprintf(w, "      Resolution:\n")
+			fmt.Fprintf(w, "        Strategy: %s\n", c.Resolution)
+			if c.Winner != "" {
+				fmt.Fprintf(w, "        Winner:   %s\n", c.Winner)
+			}
+			if c.ResultDescription != "" {
+				fmt.Fprintf(w, "        Result:   %s\n", c.ResultDescription)
+			}
+			if len(c.ConflictFiles) > 0 {
+				fmt.Fprintf(w, "        Conflict copies created:\n")
+				for _, cf := range c.ConflictFiles {
+					fmt.Fprintf(w, "          - %s\n", cf)
+				}
 			}
 		}
 	}

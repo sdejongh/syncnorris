@@ -509,10 +509,19 @@ func (p *BidirectionalPipeline) resolveConflicts(ctx context.Context, conflicts 
 // resolveConflict resolves a single conflict based on the configured strategy
 func (p *BidirectionalPipeline) resolveConflict(conflict *models.Conflict) *SyncAction {
 	strategy := p.operation.ConflictResolution
+	basePath := conflict.Path
+	ext := filepath.Ext(basePath)
+	nameWithoutExt := basePath[:len(basePath)-len(ext)]
 
 	switch strategy {
 	case models.ConflictSourceWins:
-		conflict.Resolve(strategy, models.ActionCopy)
+		conflict.ResolveWithDetails(
+			strategy,
+			models.ActionCopy,
+			"source",
+			"Source file copied to destination, destination file overwritten",
+			nil,
+		)
 		return &SyncAction{
 			Path:        conflict.Path,
 			ActionType:  models.ActionUpdate,
@@ -523,7 +532,13 @@ func (p *BidirectionalPipeline) resolveConflict(conflict *models.Conflict) *Sync
 		}
 
 	case models.ConflictDestWins:
-		conflict.Resolve(strategy, models.ActionCopy)
+		conflict.ResolveWithDetails(
+			strategy,
+			models.ActionCopy,
+			"destination",
+			"Destination file copied to source, source file overwritten",
+			nil,
+		)
 		return &SyncAction{
 			Path:        conflict.Path,
 			ActionType:  models.ActionUpdate,
@@ -537,7 +552,13 @@ func (p *BidirectionalPipeline) resolveConflict(conflict *models.Conflict) *Sync
 		// Use the newer file
 		if conflict.SourceEntry != nil && conflict.DestEntry != nil {
 			if conflict.SourceEntry.ModTime.After(conflict.DestEntry.ModTime) {
-				conflict.Resolve(strategy, models.ActionCopy)
+				conflict.ResolveWithDetails(
+					strategy,
+					models.ActionCopy,
+					"source",
+					"Source file is newer, copied to destination",
+					nil,
+				)
 				return &SyncAction{
 					Path:        conflict.Path,
 					ActionType:  models.ActionUpdate,
@@ -547,7 +568,13 @@ func (p *BidirectionalPipeline) resolveConflict(conflict *models.Conflict) *Sync
 					Reason:      "conflict resolved: newer file (source)",
 				}
 			} else {
-				conflict.Resolve(strategy, models.ActionCopy)
+				conflict.ResolveWithDetails(
+					strategy,
+					models.ActionCopy,
+					"destination",
+					"Destination file is newer, copied to source",
+					nil,
+				)
 				return &SyncAction{
 					Path:        conflict.Path,
 					ActionType:  models.ActionUpdate,
@@ -560,7 +587,13 @@ func (p *BidirectionalPipeline) resolveConflict(conflict *models.Conflict) *Sync
 		}
 		// Handle delete-modify conflicts with newer strategy
 		if conflict.SourceEntry == nil && conflict.DestEntry != nil {
-			conflict.Resolve(strategy, models.ActionCopy)
+			conflict.ResolveWithDetails(
+				strategy,
+				models.ActionCopy,
+				"destination",
+				"Source was deleted, destination file restored to source",
+				nil,
+			)
 			return &SyncAction{
 				Path:        conflict.Path,
 				ActionType:  models.ActionCopy,
@@ -570,7 +603,13 @@ func (p *BidirectionalPipeline) resolveConflict(conflict *models.Conflict) *Sync
 			}
 		}
 		if conflict.SourceEntry != nil && conflict.DestEntry == nil {
-			conflict.Resolve(strategy, models.ActionCopy)
+			conflict.ResolveWithDetails(
+				strategy,
+				models.ActionCopy,
+				"source",
+				"Destination was deleted, source file restored to destination",
+				nil,
+			)
 			return &SyncAction{
 				Path:        conflict.Path,
 				ActionType:  models.ActionCopy,
@@ -581,9 +620,21 @@ func (p *BidirectionalPipeline) resolveConflict(conflict *models.Conflict) *Sync
 		}
 
 	case models.ConflictBoth:
-		// Keep both files with renamed conflict copy
-		// This is more complex - we need to create a renamed copy
-		conflict.Resolve(strategy, models.ActionConflict)
+		// Keep both files with renamed conflict copies
+		conflictFiles := []string{}
+		if conflict.SourceEntry != nil {
+			conflictFiles = append(conflictFiles, nameWithoutExt+".source-conflict"+ext)
+		}
+		if conflict.DestEntry != nil {
+			conflictFiles = append(conflictFiles, nameWithoutExt+".dest-conflict"+ext)
+		}
+		conflict.ResolveWithDetails(
+			strategy,
+			models.ActionConflict,
+			"both",
+			"Both versions preserved: original files swapped, conflict copies created",
+			conflictFiles,
+		)
 		return &SyncAction{
 			Path:        conflict.Path,
 			ActionType:  models.ActionConflict,
@@ -592,11 +643,6 @@ func (p *BidirectionalPipeline) resolveConflict(conflict *models.Conflict) *Sync
 			DestEntry:   conflict.DestEntry,
 			Reason:      "conflict: keeping both files",
 		}
-
-	case models.ConflictAsk:
-		// In non-interactive mode, skip conflicts
-		// TODO: Implement interactive conflict resolution
-		return nil
 
 	default:
 		// Skip unresolved conflicts
@@ -784,46 +830,45 @@ func (p *BidirectionalPipeline) executeDelete(ctx context.Context, action *SyncA
 }
 
 // executeConflictBoth handles the "keep both" conflict resolution
+// After resolution, both sides will have:
+// - The original file from the other side (synchronized)
+// - A conflict copy of their own version with .source-conflict or .dest-conflict suffix
 func (p *BidirectionalPipeline) executeConflictBoth(ctx context.Context, action *SyncAction, report *models.SyncReport) error {
-	// Create conflict copies on both sides
-	// source_file -> dest_file.source-conflict
-	// dest_file -> source_file.dest-conflict
+	// Skip directories - conflict resolution only applies to files
+	isSourceDir := action.SourceEntry != nil && action.SourceEntry.IsDir
+	isDestDir := action.DestEntry != nil && action.DestEntry.IsDir
+	if isSourceDir || isDestDir {
+		// For directories, just ensure they exist on both sides
+		if isSourceDir && action.DestEntry == nil {
+			if err := p.dest.MkdirAll(ctx, action.Path); err != nil {
+				return fmt.Errorf("failed to create directory in dest: %w", err)
+			}
+			report.Stats.DirsCreated.Add(1)
+		}
+		if isDestDir && action.SourceEntry == nil {
+			if err := p.source.MkdirAll(ctx, action.Path); err != nil {
+				return fmt.Errorf("failed to create directory in source: %w", err)
+			}
+			report.Stats.DirsCreated.Add(1)
+		}
+		return nil
+	}
 
 	basePath := action.Path
 	ext := filepath.Ext(basePath)
 	nameWithoutExt := basePath[:len(basePath)-len(ext)]
 
-	if action.SourceEntry != nil {
-		// Copy source version to dest with .source-conflict suffix
-		conflictPath := nameWithoutExt + ".source-conflict" + ext
+	// Step 1: Save both versions as conflict copies BEFORE any overwrites
+	// This ensures we preserve the original content before modifying anything
 
-		reader, err := p.source.Read(ctx, basePath)
-		if err != nil {
-			return fmt.Errorf("failed to read source for conflict copy: %w", err)
-		}
-		defer reader.Close()
-
-		metadata := &storage.FileInfo{
-			Size:        action.SourceEntry.Size,
-			ModTime:     action.SourceEntry.ModTime,
-			Permissions: action.SourceEntry.Permissions,
-		}
-
-		err = p.dest.Write(ctx, conflictPath, reader, action.SourceEntry.Size, metadata)
-		if err != nil {
-			return fmt.Errorf("failed to write source conflict copy: %w", err)
-		}
-	}
-
+	// Save dest version as conflict copy in dest
 	if action.DestEntry != nil {
-		// Copy dest version to source with .dest-conflict suffix
 		conflictPath := nameWithoutExt + ".dest-conflict" + ext
 
 		reader, err := p.dest.Read(ctx, basePath)
 		if err != nil {
 			return fmt.Errorf("failed to read dest for conflict copy: %w", err)
 		}
-		defer reader.Close()
 
 		metadata := &storage.FileInfo{
 			Size:        action.DestEntry.Size,
@@ -831,11 +876,103 @@ func (p *BidirectionalPipeline) executeConflictBoth(ctx context.Context, action 
 			Permissions: action.DestEntry.Permissions,
 		}
 
-		err = p.source.Write(ctx, conflictPath, reader, action.DestEntry.Size, metadata)
+		err = p.dest.Write(ctx, conflictPath, reader, action.DestEntry.Size, metadata)
+		reader.Close()
 		if err != nil {
 			return fmt.Errorf("failed to write dest conflict copy: %w", err)
 		}
 	}
+
+	// Save source version as conflict copy in source
+	if action.SourceEntry != nil {
+		conflictPath := nameWithoutExt + ".source-conflict" + ext
+
+		reader, err := p.source.Read(ctx, basePath)
+		if err != nil {
+			return fmt.Errorf("failed to read source for conflict copy: %w", err)
+		}
+
+		metadata := &storage.FileInfo{
+			Size:        action.SourceEntry.Size,
+			ModTime:     action.SourceEntry.ModTime,
+			Permissions: action.SourceEntry.Permissions,
+		}
+
+		err = p.source.Write(ctx, conflictPath, reader, action.SourceEntry.Size, metadata)
+		reader.Close()
+		if err != nil {
+			return fmt.Errorf("failed to write source conflict copy: %w", err)
+		}
+	}
+
+	// Step 2: Copy dest version to source (using the conflict copy we just saved)
+	// We read from the conflict copy to avoid issues with already-overwritten files
+	if action.DestEntry != nil {
+		conflictPath := nameWithoutExt + ".dest-conflict" + ext
+
+		reader, err := p.dest.Read(ctx, conflictPath)
+		if err != nil {
+			return fmt.Errorf("failed to read dest conflict copy for sync: %w", err)
+		}
+
+		var readerToUse io.Reader = reader
+		if p.rateLimiter != nil {
+			readerToUse = ratelimit.NewReader(ctx, reader, p.rateLimiter)
+		}
+
+		metadata := &storage.FileInfo{
+			Size:        action.DestEntry.Size,
+			ModTime:     action.DestEntry.ModTime,
+			Permissions: action.DestEntry.Permissions,
+		}
+
+		err = p.source.Write(ctx, basePath, readerToUse, action.DestEntry.Size, metadata)
+		reader.Close()
+		if err != nil {
+			return fmt.Errorf("failed to sync dest to source: %w", err)
+		}
+
+		report.Stats.BytesTransferred.Add(action.DestEntry.Size)
+	}
+
+	// Step 3: Copy source version to dest (using the conflict copy we just saved)
+	if action.SourceEntry != nil {
+		conflictPath := nameWithoutExt + ".source-conflict" + ext
+
+		reader, err := p.source.Read(ctx, conflictPath)
+		if err != nil {
+			return fmt.Errorf("failed to read source conflict copy for sync: %w", err)
+		}
+
+		var readerToUse io.Reader = reader
+		if p.rateLimiter != nil {
+			readerToUse = ratelimit.NewReader(ctx, reader, p.rateLimiter)
+		}
+
+		metadata := &storage.FileInfo{
+			Size:        action.SourceEntry.Size,
+			ModTime:     action.SourceEntry.ModTime,
+			Permissions: action.SourceEntry.Permissions,
+		}
+
+		err = p.dest.Write(ctx, basePath, readerToUse, action.SourceEntry.Size, metadata)
+		reader.Close()
+		if err != nil {
+			return fmt.Errorf("failed to sync source to dest: %w", err)
+		}
+
+		report.Stats.BytesTransferred.Add(action.SourceEntry.Size)
+	}
+
+	// Update state for the main file - use the version that was synced to each side
+	// After resolution: source has dest's content, dest has source's content
+	if action.DestEntry != nil {
+		p.updateStateForFile(basePath, action.DestEntry, true, true)
+	} else if action.SourceEntry != nil {
+		p.updateStateForFile(basePath, action.SourceEntry, true, true)
+	}
+
+	report.Stats.FilesUpdated.Add(1)
 
 	return nil
 }

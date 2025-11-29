@@ -9,10 +9,10 @@ type Conflict struct {
 	// Path is the relative path of the conflicting file
 	Path string
 
-	// SourceEntry is the source file state
+	// SourceEntry is the source file state (before resolution)
 	SourceEntry *FileEntry
 
-	// DestEntry is the destination file state
+	// DestEntry is the destination file state (before resolution)
 	DestEntry *FileEntry
 
 	// Type categorizes the conflict
@@ -29,6 +29,15 @@ type Conflict struct {
 
 	// ResolvedAt is when the conflict was resolved
 	ResolvedAt *time.Time
+
+	// Winner indicates which side won the conflict (source, dest, or both)
+	Winner string `json:"winner,omitempty"`
+
+	// ResultDescription describes the outcome of the resolution
+	ResultDescription string `json:"result_description,omitempty"`
+
+	// ConflictFiles lists any additional files created (e.g., .source-conflict, .dest-conflict)
+	ConflictFiles []string `json:"conflict_files,omitempty"`
 }
 
 // ConflictType categorizes different kinds of conflicts
@@ -54,6 +63,17 @@ func (c *Conflict) IsResolved() bool {
 func (c *Conflict) Resolve(resolution ConflictResolution, action Action) {
 	c.Resolution = resolution
 	c.ResolvedAction = action
+	now := time.Now()
+	c.ResolvedAt = &now
+}
+
+// ResolveWithDetails marks the conflict as resolved with additional details
+func (c *Conflict) ResolveWithDetails(resolution ConflictResolution, action Action, winner string, description string, conflictFiles []string) {
+	c.Resolution = resolution
+	c.ResolvedAction = action
+	c.Winner = winner
+	c.ResultDescription = description
+	c.ConflictFiles = conflictFiles
 	now := time.Now()
 	c.ResolvedAt = &now
 }

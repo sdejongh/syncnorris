@@ -52,7 +52,7 @@ Supports one-way and bidirectional sync with multiple comparison methods.`,
 	// Optional flags
 	cmd.Flags().StringVarP(&syncFlags.Mode, "mode", "m", "oneway", "sync mode: oneway, bidirectional")
 	cmd.Flags().StringVar(&syncFlags.Comparison, "comparison", "hash", "comparison method: namesize, md5, binary, hash")
-	cmd.Flags().StringVar(&syncFlags.Conflict, "conflict", "ask", "conflict resolution: ask, source-wins, dest-wins, newer, both")
+	cmd.Flags().StringVar(&syncFlags.Conflict, "conflict", "newer", "conflict resolution: source-wins, dest-wins, newer, both")
 	cmd.Flags().BoolVar(&syncFlags.DryRun, "dry-run", false, "compare only, don't sync")
 	cmd.Flags().BoolVar(&syncFlags.CreateDest, "create-dest", false, "create destination directory if it doesn't exist")
 	cmd.Flags().BoolVar(&syncFlags.Delete, "delete", false, "delete files in destination that don't exist in source")

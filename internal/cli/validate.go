@@ -85,14 +85,13 @@ func validateSyncFlags() error {
 
 	// Validate conflict resolution
 	validConflicts := map[string]bool{
-		"ask":         true,
 		"source-wins": true,
 		"dest-wins":   true,
 		"newer":       true,
 		"both":        true,
 	}
 	if !validConflicts[syncFlags.Conflict] {
-		return fmt.Errorf("invalid conflict resolution: %s (valid: ask, source-wins, dest-wins, newer, both)", syncFlags.Conflict)
+		return fmt.Errorf("invalid conflict resolution: %s (valid: source-wins, dest-wins, newer, both)", syncFlags.Conflict)
 	}
 
 	return nil
