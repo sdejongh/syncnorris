@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/sdejongh/syncnorris/pkg/compare"
+	"github.com/sdejongh/syncnorris/pkg/logging"
 	"github.com/sdejongh/syncnorris/pkg/models"
 	"github.com/sdejongh/syncnorris/pkg/output"
 	"github.com/sdejongh/syncnorris/pkg/storage"
@@ -30,6 +31,10 @@ type SyncFlags struct {
 	DiffReport   string
 	DiffFormat   string
 	Stateful     bool
+	// Logging flags
+	LogFile      string
+	LogFormat    string
+	LogLevel     string
 }
 
 var syncFlags SyncFlags
@@ -64,6 +69,11 @@ Supports one-way and bidirectional sync with multiple comparison methods.`,
 	cmd.Flags().StringVar(&syncFlags.DiffReport, "diff-report", "", "write differences report to file")
 	cmd.Flags().StringVar(&syncFlags.DiffFormat, "diff-format", "human", "differences report format: human, json")
 	cmd.Flags().BoolVar(&syncFlags.Stateful, "stateful", false, "save sync state for bidirectional mode (enables change tracking between syncs)")
+
+	// Logging flags
+	cmd.Flags().StringVar(&syncFlags.LogFile, "log-file", "", "write logs to file (enables logging)")
+	cmd.Flags().StringVar(&syncFlags.LogFormat, "log-format", "text", "log format: text, json")
+	cmd.Flags().StringVar(&syncFlags.LogLevel, "log-level", "info", "log level: debug, info, warn, error")
 
 	return cmd
 }
@@ -152,8 +162,15 @@ func runSync(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Create sync engine (logger is nil for now)
-	engine := sync.NewEngine(source, dest, comparator, formatter, nil, operation)
+	// Create logger
+	logger, err := createLogger(syncFlags.LogFile, syncFlags.LogFormat, syncFlags.LogLevel)
+	if err != nil {
+		return fmt.Errorf("failed to create logger: %w", err)
+	}
+	defer logger.Close()
+
+	// Create sync engine
+	engine := sync.NewEngine(source, dest, comparator, formatter, logger, operation)
 
 	// Run sync
 	report, err := engine.Run(ctx)
@@ -174,4 +191,32 @@ func runSync(cmd *cobra.Command, args []string) error {
 	// Exit with appropriate code
 	os.Exit(report.Status.ExitCode())
 	return nil
+}
+
+// createLogger creates a logger based on configuration
+func createLogger(logFile, logFormat, logLevel string) (logging.Logger, error) {
+	// If no log file specified, return null logger
+	if logFile == "" {
+		return logging.NewNullLogger(), nil
+	}
+
+	// Parse log format
+	var format logging.Format
+	switch logFormat {
+	case "json":
+		format = logging.FormatJSON
+	default:
+		format = logging.FormatText
+	}
+
+	// Create file logger
+	config := logging.FileLoggerConfig{
+		Path:       logFile,
+		Format:     format,
+		Level:      logging.ParseLevel(logLevel),
+		MaxSize:    10 * 1024 * 1024, // 10 MB
+		MaxBackups: 5,
+	}
+
+	return logging.NewFileLogger(config)
 }

@@ -1,6 +1,6 @@
 # syncnorris
 
-**Version**: v0.5.0
+**Version**: v0.6.0
 **Status**: Production-ready for one-way sync | **Experimental** for bidirectional sync
 **License**: MIT
 
@@ -117,13 +117,20 @@ syncnorris has been heavily optimized and exceeds all performance targets:
 - ✅ **Configuration file** support (YAML format)
 - ✅ **Shell autocompletion** (bash, zsh, fish, powershell)
 
+### Logging (v0.6.0)
+- ✅ **File logging** with configurable output
+  - JSON and plain text formats (`--log-format text|json`)
+  - Log levels: debug, info, warn, error (`--log-level`)
+  - Automatic log rotation (size-based with configurable backups)
+  - Directory auto-creation for log paths
+  - **Detailed debug logging**: trace every file operation (copied, updated, synchronized, skipped, deleted, errors)
+
 ## Planned Features 🚧
 
 These features are **NOT yet implemented** but are planned for future releases:
 
-- 🚧 **Logging** to files (JSON, plain text)
-- 🚧 **Resume interrupted operations**
-- 🚧 **Native network storage** (SMB/Samba, NFS without mounting)
+- 🚧 **Resume interrupted operations** (post-v1.0)
+- 🚧 **Native network storage** (SMB/Samba, NFS without mounting - post-v1.0)
 
 See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for detailed feature status.
 
@@ -328,6 +335,11 @@ syncnorris help      # Show help for any command
 --mode bidirectional Two-way sync between source and destination
 --conflict STRATEGY  Conflict resolution: newer, source-wins, dest-wins, both (default: newer)
 --stateful           Enable state persistence between syncs (tracks changes)
+
+# LOGGING FLAGS
+--log-file PATH      Write logs to file (enables logging)
+--log-format FORMAT  Log format: text, json (default: text)
+--log-level LEVEL    Log level: debug, info, warn, error (default: info)
 ```
 
 #### Global Flags
@@ -531,6 +543,35 @@ syncnorris sync \
   --dry-run
 ```
 
+### Logging
+
+```bash
+# Enable file logging
+syncnorris sync -s /src -d /dst --log-file /var/log/syncnorris.log
+
+# Use JSON format for structured logging
+syncnorris sync -s /src -d /dst --log-file sync.log --log-format json
+
+# Enable debug-level logging for troubleshooting (traces every file operation)
+syncnorris sync -s /src -d /dst --log-file debug.log --log-level debug
+
+# Combine logging with other options
+syncnorris sync -s /src -d /dst \
+  --log-file /var/log/syncnorris.log \
+  --log-format json \
+  --log-level info
+```
+
+**Debug log output example (text format):**
+```
+2025-11-29T10:30:45Z [DEBUG] Processing file path=document.txt size=1024 worker=0 dest_exists=true
+2025-11-29T10:30:45Z [DEBUG] File synchronized (identical) path=document.txt size=1024 duration=1.2ms
+2025-11-29T10:30:45Z [DEBUG] Copying file (new) path=newfile.txt size=2048 dry_run=false
+2025-11-29T10:30:45Z [DEBUG] File copied successfully path=newfile.txt size=2048 duration=5.3ms
+2025-11-29T10:30:45Z [DEBUG] Updating file (content differs) path=modified.txt size=512 dry_run=false
+2025-11-29T10:30:45Z [DEBUG] File updated successfully path=modified.txt size=512 duration=3.1ms
+```
+
 ## Performance Tips
 
 1. **First sync**: Use `--comparison hash` (default) for cryptographic verification
@@ -610,20 +651,25 @@ go test -bench=. ./pkg/compare/
 ## Known Limitations
 
 1. **Bidirectional sync** is EXPERIMENTAL - functional but not production-ready
-2. **Network storage** requires mounting (no native SMB/NFS/UNC support yet)
-3. **Interrupted operations** cannot be resumed (no checkpointing)
-4. **Logging** to files is not yet implemented
+2. **Network storage** requires mounting (no native SMB/NFS support planned for post-v1.0)
+3. **Interrupted operations** cannot be resumed (checkpointing planned for post-v1.0)
 
 See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for complete list.
+
+## Roadmap
+
+- **v0.6.0**: Logging infrastructure ✅
+- **v0.7.0+**: Bisync stabilization
+- **v1.0.0**: Promote bidirectional sync to production-ready
+- **Post-v1.0**: Resume functionality, network backends (SMB/NFS)
 
 ## Contributing
 
 Contributions are welcome! Priority areas:
 
 1. Testing and feedback on bidirectional sync
-2. Resume interrupted operations
-3. Logging infrastructure
-4. Documentation improvements
+2. Documentation improvements
+3. Bug reports and feature requests
 
 ## License
 

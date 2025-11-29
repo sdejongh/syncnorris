@@ -1,7 +1,7 @@
 # Implementation Plan: File Synchronization Utility
 
 **Branch**: `master` (merged from `001-file-sync-utility`) | **Last Updated**: 2025-11-29 | **Spec**: [spec.md](spec.md)
-**Current Version**: v0.4.0
+**Current Version**: v0.6.0
 **Status**: Production-ready for one-way sync | Experimental bidirectional sync
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/commands/plan.md` for the execution workflow.
@@ -36,9 +36,9 @@ syncnorris/
 │   ├── storage/                    # Storage backends (261 lines)
 │   │   ├── backend.go              # Backend interface ✅
 │   │   └── local.go                # Local filesystem ✅
-│   │   └── smb.go                  # ❌ NOT IMPLEMENTED (planned)
-│   │   └── nfs.go                  # ❌ NOT IMPLEMENTED (planned)
-│   │   └── unc.go                  # ❌ NOT IMPLEMENTED (planned)
+│   │   └── smb.go                  # ❌ NOT IMPLEMENTED (deferred post-v1.0)
+│   │   └── nfs.go                  # ❌ NOT IMPLEMENTED (deferred post-v1.0)
+│   │   └── unc.go                  # ❌ NOT IMPLEMENTED (deferred post-v1.0)
 │   ├── output/                     # Output formatters (1,350+ lines)
 │   │   ├── formatter.go            # Formatter interface ✅
 │   │   ├── progress.go             # Advanced progress (908 lines) ✅
@@ -52,12 +52,12 @@ syncnorris/
 │   │   ├── engine.go               # Main orchestrator (591 lines) ✅
 │   │   ├── worker.go               # Parallel workers (249 lines) ✅
 │   │   ├── oneway.go               # One-way strategy (56 lines) ✅
-│   │   └── bidirectional.go        # ❌ NOT IMPLEMENTED (planned)
-│   │   └── resume.go               # ❌ NOT IMPLEMENTED (planned)
-│   └── logging/
-│       └── logger.go               # Logger interface (40 lines) ✅
-│       └── jsonlog.go              # ❌ NOT IMPLEMENTED (planned)
-│       └── textlog.go              # ❌ NOT IMPLEMENTED (planned)
+│   │   └── bidirectional.go        # ⚠️ EXPERIMENTAL (v0.4.0)
+│   │   └── state.go                # ⚠️ State tracking for bisync (v0.4.0)
+│   │   └── resume.go               # ❌ NOT IMPLEMENTED (deferred post-v1.0)
+│   └── logging/                    # File logging (v0.6.0)
+│       └── logger.go               # Logger interface (165 lines) ✅
+│       └── file.go                 # File logger with rotation (285 lines) ✅
 ├── internal/                       # Private packages
 │   ├── cli/                        # CLI commands
 │   │   ├── sync.go                 # sync command ✅
@@ -67,9 +67,9 @@ syncnorris/
 │   │   └── validate.go             # Input validation ✅
 │   └── platform/
 │       └── paths.go                # Platform-specific paths ✅
-├── tests/                          # Test structure (EMPTY)
-│   ├── unit/                       # ❌ NO TESTS
-│   ├── integration/                # ❌ NO TESTS
+├── tests/                          # Test structure (v0.5.0)
+│   ├── integration/                # ✅ Integration tests (v0.5.0)
+│   │   └── sync_test.go            # One-way and bidirectional sync tests
 │   └── testdata/fixtures/          # Test fixtures dir exists
 ├── scripts/                        # Build & test scripts ✅
 ├── docs/                           # Technical documentation ✅
@@ -110,7 +110,77 @@ All performance targets met or exceeded:
 
 ---
 
-## Recent Updates (2025-11-29 v0.4.0)
+## Recent Updates (2025-11-29 v0.6.0)
+
+### v0.6.0 Logging Infrastructure ✅
+
+#### New Features
+- **File logging** with JSON and text formats
+- **Log levels**: debug, info, warn, error (`--log-level`)
+- **Log rotation**: Size-based with configurable backups
+- **Detailed debug logging**: Trace every file operation
+  - Processing start with file metadata
+  - Copy operations (new files)
+  - Update operations (modified files)
+  - Synchronized files (identical)
+  - Skipped files (excluded by pattern)
+  - Deleted files (with `--delete` flag)
+  - Error handling with full context
+  - Conflict resolution (bidirectional mode)
+
+#### New/Modified Files
+- `pkg/logging/logger.go` (165 lines): Logger interface and levels
+- `pkg/logging/file.go` (285 lines): File logger with rotation
+- `pkg/logging/file_test.go` (580 lines): Unit tests
+- `pkg/sync/pipeline.go`: Added detailed logging for one-way sync
+- `pkg/sync/bidirectional.go`: Added detailed logging for bidirectional sync
+- `internal/cli/sync.go`: Added logging flags (--log-file, --log-format, --log-level)
+
+#### CLI Flags
+```bash
+--log-file PATH          # Write logs to file (enables logging)
+--log-format text|json   # Log format (default: text)
+--log-level debug|info|warn|error  # Log level (default: info)
+```
+
+#### Example Log Output (Debug Level)
+```
+2025-11-29T13:18:36.960Z [DEBUG] Processing file path=document.txt size=1024 worker=1 dest_exists=true
+2025-11-29T13:18:36.961Z [DEBUG] File synchronized (identical) path=document.txt size=1024
+2025-11-29T13:18:36.962Z [DEBUG] Copying file (new) path=newfile.txt size=2048 dry_run=false
+2025-11-29T13:18:36.963Z [DEBUG] File copied successfully path=newfile.txt size=2048
+```
+
+---
+
+## Previous Updates (2025-11-29 v0.5.0)
+
+### v0.5.0 Comprehensive Test Suite ✅
+
+#### Test Coverage Added
+- **Unit tests for bidirectional sync** (`pkg/sync/bidirectional_test.go`)
+  - All conflict resolution modes: newer, source-wins, dest-wins, both
+  - Context cancellation, dry-run, stateful mode
+- **Unit tests for state management** (`pkg/sync/state_test.go`)
+  - State persistence (save/load)
+  - Change detection (created, modified, deleted, none)
+- **Edge case tests**: symlinks, permissions, large files, empty files, many small files, deep directories, special characters
+- **Integration tests** (`tests/integration/sync_test.go`)
+  - One-way sync scenarios
+  - Bidirectional sync scenarios
+
+#### New Files
+- `pkg/sync/bidirectional_test.go` (991 lines)
+- `pkg/sync/state_test.go` (453 lines)
+- `tests/integration/sync_test.go` (681 lines)
+- `pkg/compare/comparator_test.go` (527 lines)
+- `pkg/models/models_test.go` (453 lines)
+- `pkg/ratelimit/reader_test.go` (364 lines)
+- `pkg/storage/local_test.go` (578 lines)
+
+---
+
+## Previous Updates (2025-11-29 v0.4.0)
 
 ### v0.4.0 Bidirectional Synchronization (EXPERIMENTAL) ⚠️
 
@@ -431,10 +501,8 @@ syncnorris/
 │   │   ├── progress.go          # ✅ Progress bar rendering (implemented)
 │   │   └── differences.go       # ✅ Differences report (human/JSON) (implemented 2025-11-23)
 │   ├── logging/
-│   │   ├── logger.go            # Logging interface
-│   │   ├── jsonlog.go           # JSON log format
-│   │   ├── textlog.go           # Plain text logs
-│   │   └── xmllog.go            # XML log format
+│   │   ├── logger.go            # ✅ Logging interface (v0.6.0)
+│   │   └── file.go              # ✅ File logger with rotation (v0.6.0)
 │   ├── config/
 │   │   ├── config.go            # Configuration structures
 │   │   └── yaml.go              # YAML parsing/writing

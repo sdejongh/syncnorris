@@ -1,8 +1,8 @@
 # Implementation Status - syncnorris
 
 **Last Updated**: 2025-11-29
-**Version**: v0.5.0
-**Branch**: feature/v0.5.0-automated-tests
+**Version**: v0.6.0
+**Branch**: feature/v0.6.0-logging
 
 ## Executive Summary
 
@@ -143,10 +143,21 @@ syncnorris v0.4.0 features **bidirectional synchronization** with conflict detec
   - State tracking for change detection
 
 ### Medium Priority (Performance & UX)
-- ❌ **Logging infrastructure**
-  - Config has logging section
-  - No actual logger implementation
-  - No log files created
+- ✅ **Logging infrastructure** (v0.6.0)
+  - File logging with configurable output
+  - JSON and text formats (`--log-format`)
+  - Log levels: debug, info, warn, error (`--log-level`)
+  - Automatic log rotation (size-based with configurable backups)
+  - Directory auto-creation for log paths
+  - **Detailed debug logging**: trace every file operation
+    - Processing start with file metadata
+    - Copy operations (new files)
+    - Update operations (modified files)
+    - Synchronized files (identical)
+    - Skipped files (excluded by pattern)
+    - Deleted files (with `--delete` flag)
+    - Error handling with full context
+    - Conflict resolution (bidirectional mode)
 
 - ❌ **Resume interrupted operations**
   - No checkpoint/state persistence
@@ -222,6 +233,11 @@ All performance goals met or exceeded:
 --verbose, -v      # Verbose output
 --config           # Config file path
 
+# LOGGING FLAGS
+--log-file PATH    # Write logs to file (enables logging)
+--log-format text|json  # Log format
+--log-level debug|info|warn|error  # Log level
+
 # BIDIRECTIONAL FLAGS (experimental)
 --mode bidirectional  # Two-way sync (experimental)
 --conflict STRATEGY   # Resolution: newer, source-wins, dest-wins, both
@@ -241,6 +257,7 @@ All performance goals met or exceeded:
 - ✅ Unit tests for storage backend
 - ✅ Unit tests for rate limiting
 - ✅ Unit tests for models
+- ✅ Unit tests for file logging (v0.6.0)
 - ✅ Integration tests for one-way sync
 - ✅ Integration tests for bidirectional sync
 - ✅ Edge case tests: symlinks, permissions, large files, empty files
@@ -328,10 +345,12 @@ gopkg.in/yaml.v3              v3.0.1   // YAML parsing - USED
 - **v0.2.5**: Windows performance optimizations (progress cleanup, namesize fast path) ✅
 - **v0.2.6**: Windows display improvements (clearer ASCII status icons: `[>>]` `[??]` `[OK]` `[!!]`) ✅
 - **v0.3.0**: JSON output, exclude patterns, timestamp comparison, bandwidth limiting ✅
-- **v0.4.0 (Current)**: Bidirectional sync, conflict resolution, state tracking ✅
-- **v0.5.0**: Resume functionality, logging infrastructure
-- **v1.0.0**: Production-ready with comprehensive tests
-- **v2.0.0**: Advanced features (network backends, S3, incremental binary diff)
+- **v0.4.0**: Bidirectional sync, conflict resolution, state tracking ✅
+- **v0.5.0**: Comprehensive test suite ✅
+- **v0.6.0 (Current)**: Logging infrastructure ✅
+- **v0.7.0+**: Bisync stabilization
+- **v1.0.0**: Production-ready (bisync promoted from experimental)
+- **Post-v1.0**: Resume functionality, network backends (SMB/NFS), advanced features
 
 ## Task Progress
 
@@ -347,29 +366,31 @@ gopkg.in/yaml.v3              v3.0.1   // YAML parsing - USED
 | Advanced Features | 23 | 10 | 13 |
 | **TOTAL** | **88** | **75** | **13** |
 
-**Progress**: 85% complete | **MVP**: ✅ Complete | **v0.4.0**: ✅ Complete
+**Progress**: 87% complete | **MVP**: ✅ Complete | **v0.6.0**: ✅ Complete
 
 ## Conclusion
 
-syncnorris v0.4.0 now supports **bidirectional synchronization** with conflict detection and multiple resolution strategies. **One-way sync is production-ready**, while **bidirectional sync is experimental** (functional but use with caution).
+syncnorris v0.6.0 adds **logging infrastructure** to the comprehensive feature set. **One-way sync is production-ready**, while **bidirectional sync is experimental** (functional but use with caution).
 
-**Key Features Added in v0.4.0**:
-- Bidirectional sync (source ↔ destination) - **EXPERIMENTAL**
-- Conflict detection (modify-modify, delete-modify, create-create)
-- Resolution strategies: newer, source-wins, dest-wins, both
-- Optional state tracking with `--stateful` flag (stateless by default)
-- State stored in ~/.config/syncnorris/state/ when enabled
-- Comprehensive unit and integration tests
+**Key Features in v0.6.0**:
+- File logging with JSON and text formats
+- Log levels: debug, info, warn, error
+- Automatic log rotation (size-based with configurable backups)
+- Directory auto-creation for log paths
+- **Detailed debug logging**: complete traceability of every file operation
+- Unit tests for logging functionality (13 tests)
 
-**v0.4.0 Bug Fixes** (2025-11-29):
-- Fixed `--conflict both` mode to properly sync files both ways
-- Fixed dry-run mode counters showing zeros
-- Removed unimplemented `--conflict ask` option
-- Added `--stateful` flag for optional state persistence
-- Enhanced conflict reports with winner, result description, and stateful info
+**Previous Releases**:
+- **v0.5.0**: Comprehensive test suite (4000+ lines of tests)
+- **v0.4.0**: Bidirectional sync, conflict resolution, state tracking
+- **v0.3.0**: JSON output, exclude patterns, bandwidth limiting
+
+**Roadmap**:
+- **v0.7.0+**: Bisync stabilization
+- **v1.0.0**: Promote bisync from experimental to production-ready
+- **Post-v1.0**: Resume functionality, network backends (SMB/NFS)
 
 **Recommendations**:
 1. Always test bidirectional sync with `--dry-run` first
-2. Add comprehensive unit and integration tests before v1.0.0
-3. Implement logging infrastructure for production use
-4. Implement resume functionality for interrupted operations
+2. Use `--log-file` with `--log-level debug` for troubleshooting
+3. Enable JSON log format for automation and log aggregation

@@ -296,6 +296,14 @@ func (p *Pipeline) scanSourceAndQueue(ctx context.Context, report *models.SyncRe
 		// Apply exclude patterns
 		if shouldExclude(f.RelativePath, p.operation.ExcludePatterns) {
 			report.Stats.FilesSkipped.Add(1)
+
+			if p.logger != nil {
+				p.logger.Debug(ctx, "File skipped (excluded by pattern)", logging.Fields{
+					"path": f.RelativePath,
+					"size": f.Size,
+				})
+			}
+
 			// Add to differences report
 			p.resultsMu.Lock()
 			report.Differences = append(report.Differences, models.FileDifference{
@@ -382,6 +390,15 @@ func (p *Pipeline) processTask(ctx context.Context, workerID int, task *FileTask
 	destInfo, destExists := p.destFiles[task.RelativePath]
 	p.destFilesMu.RUnlock()
 
+	if p.logger != nil {
+		p.logger.Debug(ctx, "Processing file", logging.Fields{
+			"path":        task.RelativePath,
+			"size":        task.Size,
+			"worker":      workerID,
+			"dest_exists": destExists,
+		})
+	}
+
 	if !destExists {
 		// File doesn't exist in destination - copy it
 		if p.formatter != nil {
@@ -438,6 +455,13 @@ func (p *Pipeline) processTask(ctx context.Context, workerID int, task *FileTask
 		p.recordError(report, task)
 		p.addResult(task)
 
+		if p.logger != nil {
+			p.logger.Error(ctx, "File comparison failed", err, logging.Fields{
+				"path": task.RelativePath,
+				"size": task.Size,
+			})
+		}
+
 		if p.formatter != nil {
 			p.formatter.Progress(output.ProgressUpdate{
 				Type:        "file_error",
@@ -455,6 +479,14 @@ func (p *Pipeline) processTask(ctx context.Context, workerID int, task *FileTask
 		report.Stats.FilesSynchronized.Add(1)
 		p.processedBytes.Add(task.Size)
 		p.addResult(task)
+
+		if p.logger != nil {
+			p.logger.Debug(ctx, "File synchronized (identical)", logging.Fields{
+				"path":     task.RelativePath,
+				"size":     task.Size,
+				"duration": time.Since(startTime).String(),
+			})
+		}
 
 		if p.formatter != nil {
 			p.formatter.Progress(output.ProgressUpdate{
@@ -475,11 +507,26 @@ func (p *Pipeline) processTask(ctx context.Context, workerID int, task *FileTask
 
 // copyFile copies a file from source to destination
 func (p *Pipeline) copyFile(ctx context.Context, workerID int, task *FileTask, report *models.SyncReport, fileIndex int, startTime time.Time) {
+	if p.logger != nil {
+		p.logger.Debug(ctx, "Copying file (new)", logging.Fields{
+			"path":    task.RelativePath,
+			"size":    task.Size,
+			"dry_run": p.operation.DryRun,
+		})
+	}
+
 	if p.operation.DryRun {
 		task.MarkCompleted(ResultCopied, task.Size, time.Since(startTime))
 		report.Stats.FilesCopied.Add(1)
 		p.processedBytes.Add(task.Size)
 		p.addResult(task)
+
+		if p.logger != nil {
+			p.logger.Debug(ctx, "File would be copied (dry-run)", logging.Fields{
+				"path": task.RelativePath,
+				"size": task.Size,
+			})
+		}
 
 		if p.formatter != nil {
 			p.formatter.Progress(output.ProgressUpdate{
@@ -500,6 +547,12 @@ func (p *Pipeline) copyFile(ctx context.Context, workerID int, task *FileTask, r
 		report.Stats.FilesErrored.Add(1)
 		p.recordError(report, task)
 		p.addResult(task)
+
+		if p.logger != nil {
+			p.logger.Error(ctx, "Failed to read source file", err, logging.Fields{
+				"path": task.RelativePath,
+			})
+		}
 
 		if p.formatter != nil {
 			p.formatter.Progress(output.ProgressUpdate{
@@ -525,6 +578,12 @@ func (p *Pipeline) copyFile(ctx context.Context, workerID int, task *FileTask, r
 		report.Stats.FilesErrored.Add(1)
 		p.recordError(report, task)
 		p.addResult(task)
+
+		if p.logger != nil {
+			p.logger.Error(ctx, "Failed to get source file metadata", err, logging.Fields{
+				"path": task.RelativePath,
+			})
+		}
 
 		if p.formatter != nil {
 			p.formatter.Progress(output.ProgressUpdate{
@@ -562,6 +621,13 @@ func (p *Pipeline) copyFile(ctx context.Context, workerID int, task *FileTask, r
 		p.recordError(report, task)
 		p.addResult(task)
 
+		if p.logger != nil {
+			p.logger.Error(ctx, "Failed to write destination file", err, logging.Fields{
+				"path": task.RelativePath,
+				"size": task.Size,
+			})
+		}
+
 		if p.formatter != nil {
 			p.formatter.Progress(output.ProgressUpdate{
 				Type:        "file_error",
@@ -579,6 +645,14 @@ func (p *Pipeline) copyFile(ctx context.Context, workerID int, task *FileTask, r
 	p.processedBytes.Add(task.Size)
 	p.addResult(task)
 
+	if p.logger != nil {
+		p.logger.Debug(ctx, "File copied successfully", logging.Fields{
+			"path":     task.RelativePath,
+			"size":     task.Size,
+			"duration": time.Since(startTime).String(),
+		})
+	}
+
 	if p.formatter != nil {
 		p.formatter.Progress(output.ProgressUpdate{
 			Type:         "file_complete",
@@ -592,6 +666,14 @@ func (p *Pipeline) copyFile(ctx context.Context, workerID int, task *FileTask, r
 
 // updateFile updates an existing file in destination
 func (p *Pipeline) updateFile(ctx context.Context, workerID int, task *FileTask, report *models.SyncReport, fileIndex int, startTime time.Time) {
+	if p.logger != nil {
+		p.logger.Debug(ctx, "Updating file (content differs)", logging.Fields{
+			"path":    task.RelativePath,
+			"size":    task.Size,
+			"dry_run": p.operation.DryRun,
+		})
+	}
+
 	// Notify formatter that we're switching from hashing to copying
 	// This resets the progress and changes the icon from 🔍 to ⏳
 	if p.formatter != nil {
@@ -608,6 +690,13 @@ func (p *Pipeline) updateFile(ctx context.Context, workerID int, task *FileTask,
 		report.Stats.FilesUpdated.Add(1)
 		p.processedBytes.Add(task.Size)
 		p.addResult(task)
+
+		if p.logger != nil {
+			p.logger.Debug(ctx, "File would be updated (dry-run)", logging.Fields{
+				"path": task.RelativePath,
+				"size": task.Size,
+			})
+		}
 
 		if p.formatter != nil {
 			p.formatter.Progress(output.ProgressUpdate{
@@ -628,6 +717,12 @@ func (p *Pipeline) updateFile(ctx context.Context, workerID int, task *FileTask,
 		report.Stats.FilesErrored.Add(1)
 		p.recordError(report, task)
 		p.addResult(task)
+
+		if p.logger != nil {
+			p.logger.Error(ctx, "Failed to read source file for update", err, logging.Fields{
+				"path": task.RelativePath,
+			})
+		}
 
 		if p.formatter != nil {
 			p.formatter.Progress(output.ProgressUpdate{
@@ -652,6 +747,12 @@ func (p *Pipeline) updateFile(ctx context.Context, workerID int, task *FileTask,
 		report.Stats.FilesErrored.Add(1)
 		p.recordError(report, task)
 		p.addResult(task)
+
+		if p.logger != nil {
+			p.logger.Error(ctx, "Failed to get source file metadata for update", err, logging.Fields{
+				"path": task.RelativePath,
+			})
+		}
 
 		if p.formatter != nil {
 			p.formatter.Progress(output.ProgressUpdate{
@@ -687,6 +788,13 @@ func (p *Pipeline) updateFile(ctx context.Context, workerID int, task *FileTask,
 		p.recordError(report, task)
 		p.addResult(task)
 
+		if p.logger != nil {
+			p.logger.Error(ctx, "Failed to write destination file for update", err, logging.Fields{
+				"path": task.RelativePath,
+				"size": task.Size,
+			})
+		}
+
 		if p.formatter != nil {
 			p.formatter.Progress(output.ProgressUpdate{
 				Type:        "file_error",
@@ -703,6 +811,14 @@ func (p *Pipeline) updateFile(ctx context.Context, workerID int, task *FileTask,
 	report.Stats.BytesTransferred.Add(task.Size)
 	p.processedBytes.Add(task.Size)
 	p.addResult(task)
+
+	if p.logger != nil {
+		p.logger.Debug(ctx, "File updated successfully", logging.Fields{
+			"path":     task.RelativePath,
+			"size":     task.Size,
+			"duration": time.Since(startTime).String(),
+		})
+	}
 
 	if p.formatter != nil {
 		p.formatter.Progress(output.ProgressUpdate{

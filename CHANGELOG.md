@@ -1,5 +1,66 @@
 # Changelog - syncnorris
 
+## [0.6.0] - 2025-11-29
+
+### Logging Infrastructure
+
+#### File Logging
+- **Implementation**: Complete file logging system with configurable output
+  - JSON and plain text formats (`--log-format text|json`)
+  - Log levels: debug, info, warn, error (`--log-level`)
+  - Automatic log rotation (size-based with configurable max size and backups)
+  - Directory auto-creation for nested log paths
+  - NullLogger for disabled logging (no overhead)
+- **CLI Flags**:
+  - `--log-file PATH`: Write logs to file (enables logging)
+  - `--log-format text|json`: Log format (default: text)
+  - `--log-level debug|info|warn|error`: Log level (default: info)
+- **Files Created**:
+  - `pkg/logging/file.go` (FileLogger implementation with rotation)
+  - `pkg/logging/null.go` (NullLogger for disabled logging)
+  - `pkg/logging/file_test.go` (comprehensive unit tests)
+- **Files Modified**:
+  - `internal/cli/sync.go` (added logging flags and createLogger function)
+  - `internal/cli/compare.go` (added logging flags)
+  - `pkg/sync/bidirectional.go` (added logging calls for sync phases)
+
+#### Usage Examples
+```bash
+# Enable file logging
+syncnorris sync -s /src -d /dst --log-file /var/log/syncnorris.log
+
+# Use JSON format for structured logging
+syncnorris sync -s /src -d /dst --log-file sync.log --log-format json
+
+# Enable debug-level logging for troubleshooting
+syncnorris sync -s /src -d /dst --log-file debug.log --log-level debug
+
+# Combine logging with other options
+syncnorris sync -s /src -d /dst \
+  --log-file /var/log/syncnorris.log \
+  --log-format json \
+  --log-level info \
+  --mode bidirectional
+```
+
+#### Log Output Formats
+
+**Text Format:**
+```
+2025-11-29T10:30:45Z [INFO] Starting bidirectional sync source=/src dest=/dst
+2025-11-29T10:30:45Z [INFO] Phase 1: Loading previous state
+2025-11-29T10:30:46Z [INFO] Phase 2: Scanning directories
+2025-11-29T10:30:47Z [INFO] Sync completed total_files=100 conflicts=2
+```
+
+**JSON Format:**
+```json
+{"timestamp":"2025-11-29T10:30:45Z","level":"INFO","message":"Starting bidirectional sync","source":"/src","dest":"/dst"}
+{"timestamp":"2025-11-29T10:30:47Z","level":"INFO","message":"Sync completed","total_files":100,"conflicts":2}
+```
+
+---
+
 ## [0.5.0] - 2025-11-29
 
 ### Test Coverage

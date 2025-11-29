@@ -1,12 +1,12 @@
 # SyncNorris - Implementation Summary
 
-**Version**: v0.3.0
-**Last Updated**: 2025-11-28
-**Sessions**: Performance Optimization (2025-11-23), Architecture Refactor (2025-11-27), Differences Report Enhancement (2025-11-28), Delete Orphans Feature (2025-11-28), Windows Performance Optimization (2025-11-28), Windows Display Improvements (2025-11-28), v0.3.0 Features (2025-11-28)
+**Version**: v0.6.0
+**Last Updated**: 2025-11-29
+**Sessions**: Performance Optimization (2025-11-23), Architecture Refactor (2025-11-27), Differences Report Enhancement (2025-11-28), Delete Orphans Feature (2025-11-28), Windows Performance Optimization (2025-11-28), Windows Display Improvements (2025-11-28), v0.3.0 Features (2025-11-28), v0.4.0 Bidirectional Sync (2025-11-28), v0.5.0 Test Coverage (2025-11-29), v0.6.0 Logging Infrastructure (2025-11-29)
 
 ## Executive Summary
 
-syncnorris v0.3.0 représente une évolution majeure avec une **refonte architecturale en pipeline producer-consumer**, des **optimisations Windows**, et un **système de rapport de différences amélioré**. La v0.3.0 ajoute la **sortie JSON**, les **patterns d'exclusion**, la **comparaison par timestamp**, et la **limitation de bande passante**. Les gains de performance atteignent **10x à 40x** pour les opérations de re-synchronisation.
+syncnorris v0.6.0 ajoute une **infrastructure de logging complète** avec traçabilité détaillée de chaque opération fichier. La v0.4.0 a introduit la **synchronisation bidirectionnelle** avec résolution de conflits, et la v0.5.0 a ajouté une **suite de tests complète**. Les gains de performance atteignent **10x à 40x** pour les opérations de re-synchronisation.
 
 ## Problèmes Identifiés
 
@@ -561,6 +561,73 @@ syncnorris v0.2.5 représente une évolution majeure de l'outil avec une archite
 
 **Status**: ✅ Production-ready pour synchronisation one-way
 
+## Nouveautés v0.4.0 (2025-11-28)
+
+### Synchronisation Bidirectionnelle (EXPERIMENTAL)
+- **Fichiers**: `pkg/sync/bidirectional.go`, `pkg/sync/state.go`
+- **Fonctionnement**: Synchronisation deux-voies avec détection de conflits
+- **Stratégies de résolution**: `newer`, `source-wins`, `dest-wins`, `both`
+- **Gestion d'état optionnelle**: `--stateful` pour le suivi des changements
+- **CLI**: `--mode bidirectional`, `--conflict STRATEGY`, `--stateful`
+
+**Status**: ⚠️ EXPERIMENTAL - Utiliser avec précaution, toujours tester avec `--dry-run`
+
+## Nouveautés v0.5.0 (2025-11-29)
+
+### Suite de Tests Complète
+- **Tests unitaires**: bidirectional sync, state management, conflict resolution
+- **Tests d'intégration**: one-way sync, bidirectional sync
+- **Tests edge cases**: symlinks, permissions, large files, empty files
+- **Couverture**: ~4000+ lignes de tests
+
+**Status**: ✅ Tests complets pour toutes les fonctionnalités
+
+## Nouveautés v0.6.0 (2025-11-29)
+
+### Infrastructure de Logging
+- **Fichiers créés**:
+  - `pkg/logging/file.go` - FileLogger avec rotation
+  - `pkg/logging/null.go` - NullLogger pour logging désactivé
+  - `pkg/logging/file_test.go` - 13 tests unitaires
+- **Fichiers modifiés**:
+  - `internal/cli/sync.go` - Flags et intégration logging
+  - `internal/cli/compare.go` - Flags logging
+  - `pkg/sync/pipeline.go` - Logging détaillé one-way
+  - `pkg/sync/bidirectional.go` - Logging détaillé bidirectionnel
+
+### Fonctionnalités Logging
+- **Formats**: JSON et texte (`--log-format text|json`)
+- **Niveaux**: debug, info, warn, error (`--log-level`)
+- **Rotation**: Automatique par taille avec backups configurables
+- **Création répertoires**: Automatique pour chemins imbriqués
+
+### Logging Détaillé (niveau DEBUG)
+Chaque opération fichier est tracée:
+- `Processing file` - Début du traitement avec métadonnées
+- `Copying file (new)` - Copie d'un nouveau fichier
+- `File copied successfully` - Copie réussie avec durée
+- `Updating file (content differs)` - Mise à jour d'un fichier modifié
+- `File updated successfully` - Mise à jour réussie avec durée
+- `File synchronized (identical)` - Fichier identique
+- `File skipped (excluded by pattern)` - Fichier exclu
+- `Deleting file` - Suppression de fichier
+- `File deleted successfully` - Suppression réussie
+- `Resolving conflict` - Résolution de conflit (bidirectionnel)
+- `Conflict resolved` - Conflit résolu avec gagnant
+
+### Exemple de Log (format texte)
+```
+2025-11-29T10:30:45Z [INFO] Starting pipeline sync operation source=/src dest=/dst
+2025-11-29T10:30:45Z [DEBUG] Processing file path=file1.txt size=1024 worker=0 dest_exists=false
+2025-11-29T10:30:45Z [DEBUG] Copying file (new) path=file1.txt size=1024 dry_run=false
+2025-11-29T10:30:45Z [DEBUG] File copied successfully path=file1.txt size=1024 duration=5.3ms
+2025-11-29T10:30:45Z [DEBUG] Processing file path=file2.txt size=2048 worker=1 dest_exists=true
+2025-11-29T10:30:45Z [DEBUG] File synchronized (identical) path=file2.txt size=2048 duration=1.2ms
+2025-11-29T10:30:45Z [INFO] Pipeline sync completed files_copied=1 files_synchronized=1 duration=10ms
+```
+
+**Status**: ✅ Production-ready
+
 ---
 
-*Dernière mise à jour: 2025-11-28*
+*Dernière mise à jour: 2025-11-29*

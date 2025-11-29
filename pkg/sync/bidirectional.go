@@ -70,6 +70,18 @@ func (p *BidirectionalPipeline) Run(ctx context.Context) (*models.SyncReport, er
 		Status:      models.StatusSuccess,
 	}
 
+	// Log start of bidirectional sync
+	if p.logger != nil {
+		p.logger.Info(ctx, "Starting bidirectional sync", logging.Fields{
+			"operation_id": p.operation.ID,
+			"source":       p.operation.SourcePath,
+			"dest":         p.operation.DestPath,
+			"conflict":     p.operation.ConflictResolution,
+			"stateful":     p.operation.Stateful,
+			"dry_run":      p.operation.DryRun,
+		})
+	}
+
 	// Load previous state (only if stateful mode is enabled)
 	var err error
 	if p.operation.Stateful {
@@ -100,21 +112,52 @@ func (p *BidirectionalPipeline) Run(ctx context.Context) (*models.SyncReport, er
 	p.formatter.Start(os.Stdout, 0, 0, p.config.MaxWorkers)
 
 	// Phase 1: Scan both sides and detect changes
+	if p.logger != nil {
+		p.logger.Debug(ctx, "Phase 1: Scanning source and destination", nil)
+	}
 	sourceFiles, destFiles, err := p.scanBothSides(ctx, report)
 	if err != nil {
+		if p.logger != nil {
+			p.logger.Error(ctx, "Scan failed", err, nil)
+		}
 		p.formatter.Complete(report)
 		return report, fmt.Errorf("scan failed: %w", err)
 	}
+	if p.logger != nil {
+		p.logger.Info(ctx, "Scan complete", logging.Fields{
+			"source_files": len(sourceFiles),
+			"dest_files":   len(destFiles),
+		})
+	}
 
 	// Phase 2: Analyze changes and detect conflicts
+	if p.logger != nil {
+		p.logger.Debug(ctx, "Phase 2: Analyzing changes and detecting conflicts", nil)
+	}
 	actions, conflicts := p.analyzeChanges(ctx, sourceFiles, destFiles, report)
 
 	// Phase 3: Handle conflicts according to resolution strategy
+	if p.logger != nil && len(conflicts) > 0 {
+		p.logger.Info(ctx, "Phase 3: Resolving conflicts", logging.Fields{
+			"conflicts": len(conflicts),
+			"strategy":  p.operation.ConflictResolution,
+		})
+	}
 	resolvedActions := p.resolveConflicts(ctx, conflicts, report)
 	actions = append(actions, resolvedActions...)
 
 	// Phase 4: Execute sync actions
+	if p.logger != nil {
+		p.logger.Info(ctx, "Phase 4: Executing sync actions", logging.Fields{
+			"total_actions": len(actions),
+		})
+	}
 	if err := p.executeActions(ctx, actions, report); err != nil {
+		if p.logger != nil {
+			p.logger.Warn(ctx, "Some actions failed during execution", logging.Fields{
+				"error": err.Error(),
+			})
+		}
 		report.Status = models.StatusPartial
 	}
 
@@ -143,6 +186,19 @@ func (p *BidirectionalPipeline) Run(ctx context.Context) (*models.SyncReport, er
 	}
 
 	p.formatter.Complete(report)
+
+	// Log completion
+	if p.logger != nil {
+		p.logger.Info(ctx, "Bidirectional sync completed", logging.Fields{
+			"status":        report.Status,
+			"files_copied":  report.Stats.FilesCopied.Load(),
+			"files_updated": report.Stats.FilesUpdated.Load(),
+			"files_deleted": report.Stats.FilesDeleted.Load(),
+			"files_errored": report.Stats.FilesErrored.Load(),
+			"conflicts":     len(report.Conflicts),
+			"duration":      report.Duration.String(),
+		})
+	}
 
 	return report, nil
 }
@@ -198,6 +254,12 @@ func (p *BidirectionalPipeline) scanSide(ctx context.Context, backend storage.Ba
 		// Apply exclude patterns
 		if shouldExclude(storageEntry.RelativePath, p.operation.ExcludePatterns) {
 			report.Stats.FilesSkipped.Add(1)
+			if p.logger != nil {
+				p.logger.Debug(ctx, "File skipped (excluded by pattern)", logging.Fields{
+					"path":      storageEntry.RelativePath,
+					"is_source": isSource,
+				})
+			}
 			continue
 		}
 
@@ -504,9 +566,26 @@ func (p *BidirectionalPipeline) resolveConflicts(ctx context.Context, conflicts 
 		default:
 		}
 
+		if p.logger != nil {
+			p.logger.Debug(ctx, "Resolving conflict", logging.Fields{
+				"path":     conflict.Path,
+				"type":     conflict.Type,
+				"strategy": p.operation.ConflictResolution,
+			})
+		}
+
 		action := p.resolveConflict(conflict)
 		if action != nil {
 			actions = append(actions, action)
+
+			if p.logger != nil {
+				p.logger.Debug(ctx, "Conflict resolved", logging.Fields{
+					"path":       conflict.Path,
+					"resolution": conflict.Resolution,
+					"winner":     conflict.Winner,
+					"action":     action.ActionType,
+				})
+			}
 		}
 
 		// Add the resolved conflict to the report
@@ -718,6 +797,21 @@ func (p *BidirectionalPipeline) executeAction(ctx context.Context, action *SyncA
 	if p.operation.DryRun {
 		// Just report what would happen
 		p.reportDryRunAction(action, report)
+		if p.logger != nil {
+			var size int64
+			if action.SourceEntry != nil {
+				size = action.SourceEntry.Size
+			} else if action.DestEntry != nil {
+				size = action.DestEntry.Size
+			}
+			p.logger.Debug(ctx, "Dry-run action", logging.Fields{
+				"path":      action.Path,
+				"action":    action.ActionType,
+				"direction": action.Direction,
+				"size":      size,
+				"reason":    action.Reason,
+			})
+		}
 		return nil
 	}
 
@@ -733,6 +827,19 @@ func (p *BidirectionalPipeline) executeAction(ctx context.Context, action *SyncA
 
 	case models.ActionSkip:
 		report.Stats.FilesSynchronized.Add(1)
+		if p.logger != nil {
+			var size int64
+			if action.SourceEntry != nil {
+				size = action.SourceEntry.Size
+			} else if action.DestEntry != nil {
+				size = action.DestEntry.Size
+			}
+			p.logger.Debug(ctx, "File synchronized (identical)", logging.Fields{
+				"path":   action.Path,
+				"size":   size,
+				"reason": action.Reason,
+			})
+		}
 		// Update state for skipped files (they're already in sync)
 		if action.SourceEntry != nil {
 			p.updateStateForFile(action.Path, action.SourceEntry, true, true)
@@ -767,17 +874,41 @@ func (p *BidirectionalPipeline) executeCopy(ctx context.Context, action *SyncAct
 		return fmt.Errorf("source entry is nil")
 	}
 
+	if p.logger != nil {
+		p.logger.Debug(ctx, "Copying file (new)", logging.Fields{
+			"path":      action.Path,
+			"size":      srcEntry.Size,
+			"direction": action.Direction,
+			"reason":    action.Reason,
+		})
+	}
+
 	if srcEntry.IsDir {
 		// Create directory
 		err := dstBackend.MkdirAll(ctx, action.Path)
 		if err != nil {
+			if p.logger != nil {
+				p.logger.Error(ctx, "Failed to create directory", err, logging.Fields{
+					"path": action.Path,
+				})
+			}
 			return fmt.Errorf("failed to create directory: %w", err)
 		}
 		report.Stats.DirsCreated.Add(1)
+		if p.logger != nil {
+			p.logger.Debug(ctx, "Directory created", logging.Fields{
+				"path": action.Path,
+			})
+		}
 	} else {
 		// Copy file
 		reader, err := srcBackend.Read(ctx, action.Path)
 		if err != nil {
+			if p.logger != nil {
+				p.logger.Error(ctx, "Failed to read source file", err, logging.Fields{
+					"path": action.Path,
+				})
+			}
 			return fmt.Errorf("failed to read source: %w", err)
 		}
 		defer reader.Close()
@@ -796,11 +927,25 @@ func (p *BidirectionalPipeline) executeCopy(ctx context.Context, action *SyncAct
 
 		err = dstBackend.Write(ctx, action.Path, readerToUse, srcEntry.Size, metadata)
 		if err != nil {
+			if p.logger != nil {
+				p.logger.Error(ctx, "Failed to write destination file", err, logging.Fields{
+					"path": action.Path,
+					"size": srcEntry.Size,
+				})
+			}
 			return fmt.Errorf("failed to write destination: %w", err)
 		}
 
 		report.Stats.FilesCopied.Add(1)
 		report.Stats.BytesTransferred.Add(srcEntry.Size)
+
+		if p.logger != nil {
+			p.logger.Debug(ctx, "File copied successfully", logging.Fields{
+				"path":      action.Path,
+				"size":      srcEntry.Size,
+				"direction": action.Direction,
+			})
+		}
 	}
 
 	// Update state
@@ -811,6 +956,21 @@ func (p *BidirectionalPipeline) executeCopy(ctx context.Context, action *SyncAct
 
 // executeUpdate updates an existing file
 func (p *BidirectionalPipeline) executeUpdate(ctx context.Context, action *SyncAction, report *models.SyncReport) error {
+	if p.logger != nil {
+		var size int64
+		if action.SourceEntry != nil && action.Direction == DirectionSourceToDest {
+			size = action.SourceEntry.Size
+		} else if action.DestEntry != nil {
+			size = action.DestEntry.Size
+		}
+		p.logger.Debug(ctx, "Updating file (content differs)", logging.Fields{
+			"path":      action.Path,
+			"size":      size,
+			"direction": action.Direction,
+			"reason":    action.Reason,
+		})
+	}
+
 	err := p.executeCopy(ctx, action, report)
 	if err != nil {
 		return err
@@ -820,24 +980,62 @@ func (p *BidirectionalPipeline) executeUpdate(ctx context.Context, action *SyncA
 	report.Stats.FilesCopied.Add(-1)
 	report.Stats.FilesUpdated.Add(1)
 
+	if p.logger != nil {
+		var size int64
+		if action.SourceEntry != nil && action.Direction == DirectionSourceToDest {
+			size = action.SourceEntry.Size
+		} else if action.DestEntry != nil {
+			size = action.DestEntry.Size
+		}
+		p.logger.Debug(ctx, "File updated successfully", logging.Fields{
+			"path":      action.Path,
+			"size":      size,
+			"direction": action.Direction,
+		})
+	}
+
 	return nil
 }
 
 // executeDelete deletes a file from the target side
 func (p *BidirectionalPipeline) executeDelete(ctx context.Context, action *SyncAction, report *models.SyncReport) error {
 	var backend storage.Backend
+	var target string
 	if action.Direction == DirectionSourceToDest {
 		backend = p.dest
+		target = "destination"
 	} else {
 		backend = p.source
+		target = "source"
+	}
+
+	if p.logger != nil {
+		p.logger.Debug(ctx, "Deleting file", logging.Fields{
+			"path":   action.Path,
+			"target": target,
+			"reason": action.Reason,
+		})
 	}
 
 	err := backend.Delete(ctx, action.Path)
 	if err != nil {
+		if p.logger != nil {
+			p.logger.Error(ctx, "Failed to delete file", err, logging.Fields{
+				"path":   action.Path,
+				"target": target,
+			})
+		}
 		return fmt.Errorf("failed to delete: %w", err)
 	}
 
 	report.Stats.FilesDeleted.Add(1)
+
+	if p.logger != nil {
+		p.logger.Debug(ctx, "File deleted successfully", logging.Fields{
+			"path":   action.Path,
+			"target": target,
+		})
+	}
 
 	// Update state - file no longer exists on either side
 	p.state.RemoveFile(action.Path)

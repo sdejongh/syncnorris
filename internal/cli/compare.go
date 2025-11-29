@@ -38,6 +38,11 @@ without performing any file operations. This is equivalent to sync --dry-run.`,
 	cmd.Flags().StringVarP(&syncFlags.Bandwidth, "bandwidth", "b", "", "bandwidth limit (e.g., \"10M\", \"1G\")")
 	cmd.Flags().BoolVar(&syncFlags.Delete, "delete", false, "include files that would be deleted from destination")
 
+	// Logging flags
+	cmd.Flags().StringVar(&syncFlags.LogFile, "log-file", "", "write logs to file (enables logging)")
+	cmd.Flags().StringVar(&syncFlags.LogFormat, "log-format", "text", "log format: text, json")
+	cmd.Flags().StringVar(&syncFlags.LogLevel, "log-level", "info", "log level: debug, info, warn, error")
+
 	return cmd
 }
 
@@ -123,8 +128,15 @@ func runCompare(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Create sync engine (logger is nil for now)
-	engine := sync.NewEngine(source, dest, comparator, formatter, nil, operation)
+	// Create logger
+	logger, err := createLogger(syncFlags.LogFile, syncFlags.LogFormat, syncFlags.LogLevel)
+	if err != nil {
+		return fmt.Errorf("failed to create logger: %w", err)
+	}
+	defer logger.Close()
+
+	// Create sync engine
+	engine := sync.NewEngine(source, dest, comparator, formatter, logger, operation)
 
 	// Run comparison (dry-run sync)
 	report, err := engine.Run(ctx)
