@@ -1,12 +1,12 @@
 # Implementation Status - syncnorris
 
-**Last Updated**: 2025-11-29
-**Version**: v0.6.0
-**Branch**: feature/v0.6.0-logging
+**Last Updated**: 2026-03-13
+**Version**: v0.6.1
+**Branch**: master
 
 ## Executive Summary
 
-syncnorris v0.4.0 features **bidirectional synchronization** with conflict detection and resolution. The tool now supports both one-way and bidirectional sync scenarios. v0.4.0 adds **bidirectional sync**, **conflict resolution strategies** (newer, source-wins, dest-wins, both), and **optional state tracking** for change detection between syncs.
+syncnorris v0.6.1 adds **streaming file discovery** to the pipeline for improved performance on large directories. The tool features **bidirectional synchronization** (experimental) with conflict detection and resolution, **logging infrastructure**, and a comprehensive test suite.
 
 > ⚠️ **Note**: Bidirectional sync is **EXPERIMENTAL** - functional but not yet production-ready. Use with caution and always test with `--dry-run` first.
 
@@ -92,8 +92,9 @@ syncnorris v0.4.0 features **bidirectional synchronization** with conflict detec
   - `--bandwidth` / `-b` flag
 
 ### Architecture
-- ✅ **Producer-Consumer Pipeline** (refactored 2025-11-27)
+- ✅ **Producer-Consumer Pipeline** (refactored 2025-11-27, streaming v0.6.1)
   - Scanner (producer) populates task queue while workers process in parallel
+  - **Streaming file discovery** (v0.6.1): `Walk` method streams files to task queue as they're found, no intermediate slice buffering
   - Each worker handles complete file lifecycle (verify → compare → copy)
   - Dynamic progress updates during scan phase
   - No separate planning phase (more efficient)
@@ -107,6 +108,7 @@ syncnorris v0.4.0 features **bidirectional synchronization** with conflict detec
 - ✅ **Parallel file comparisons** (worker pool architecture)
 - ✅ **Metadata preservation** (timestamps, permissions)
 - ✅ **Composite comparison strategy** (10-40x faster re-sync)
+- ✅ **Streaming file discovery** (v0.6.1, eliminates blocking scan before processing)
 - ✅ **Graceful interrupt handling** (cursor visibility restored on Ctrl+C)
 
 ### Configuration
@@ -318,7 +320,7 @@ gopkg.in/yaml.v3              v3.0.1   // YAML parsing - USED
 1. **Progress display in pipes/redirects**: Terminal width detection fails, defaults to 120 chars
 2. **No graceful shutdown**: Ctrl+C kills immediately, no cleanup
 3. **Error reporting**: Errors during sync don't stop operation, may lose error details
-4. **Memory usage**: Large directory trees loaded entirely into memory for comparison
+4. **Memory usage**: Bidirectional sync still loads full directory trees into memory (one-way pipeline uses streaming since v0.6.1)
 5. **No progress persistence**: Can't resume interrupted syncs
 
 ## Recommended Next Steps
@@ -347,7 +349,8 @@ gopkg.in/yaml.v3              v3.0.1   // YAML parsing - USED
 - **v0.3.0**: JSON output, exclude patterns, timestamp comparison, bandwidth limiting ✅
 - **v0.4.0**: Bidirectional sync, conflict resolution, state tracking ✅
 - **v0.5.0**: Comprehensive test suite ✅
-- **v0.6.0 (Current)**: Logging infrastructure ✅
+- **v0.6.0**: Logging infrastructure ✅
+- **v0.6.1 (Current)**: Streaming file discovery for pipeline performance ✅
 - **v0.7.0+**: Bisync stabilization
 - **v1.0.0**: Production-ready (bisync promoted from experimental)
 - **Post-v1.0**: Resume functionality, network backends (SMB/NFS), advanced features
@@ -366,21 +369,20 @@ gopkg.in/yaml.v3              v3.0.1   // YAML parsing - USED
 | Advanced Features | 23 | 10 | 13 |
 | **TOTAL** | **88** | **75** | **13** |
 
-**Progress**: 87% complete | **MVP**: ✅ Complete | **v0.6.0**: ✅ Complete
+**Progress**: 87% complete | **MVP**: ✅ Complete | **v0.6.1**: ✅ Complete
 
 ## Conclusion
 
-syncnorris v0.6.0 adds **logging infrastructure** to the comprehensive feature set. **One-way sync is production-ready**, while **bidirectional sync is experimental** (functional but use with caution).
+syncnorris v0.6.1 adds **streaming file discovery** for improved pipeline performance. **One-way sync is production-ready**, while **bidirectional sync is experimental** (functional but use with caution).
 
-**Key Features in v0.6.0**:
-- File logging with JSON and text formats
-- Log levels: debug, info, warn, error
-- Automatic log rotation (size-based with configurable backups)
-- Directory auto-creation for log paths
-- **Detailed debug logging**: complete traceability of every file operation
-- Unit tests for logging functionality (13 tests)
+**Key Features in v0.6.1**:
+- Streaming `Walk` method on `storage.Backend` interface
+- One-way pipeline scans and processes files simultaneously (no blocking scan)
+- Reduced peak memory usage (no intermediate slice allocation)
+- `List` refactored as wrapper around `Walk` (no code duplication)
 
 **Previous Releases**:
+- **v0.6.0**: Logging infrastructure (file logging, JSON/text, rotation, debug tracing)
 - **v0.5.0**: Comprehensive test suite (4000+ lines of tests)
 - **v0.4.0**: Bidirectional sync, conflict resolution, state tracking
 - **v0.3.0**: JSON output, exclude patterns, bandwidth limiting

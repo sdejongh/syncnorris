@@ -35,12 +35,12 @@ CLI (Cobra) → `SyncOperation` model → `Engine` → Pipeline (one-way) or Bid
 
 ### Producer-Consumer Pipeline (`pkg/sync/pipeline.go`)
 
-The core sync mechanism is a producer-consumer pipeline:
-1. **Scanner** scans source and destination, applies exclude patterns, builds file maps
+The core sync mechanism is a producer-consumer pipeline with streaming file discovery:
+1. **Scanner** uses `Backend.Walk()` to stream files as they're discovered — no intermediate slice buffering. Workers start processing as soon as the first file is found.
 2. **Task Queue** (buffered channel, capacity 1000) holds `FileTask` entries
 3. **Worker Pool** (default 5 workers) processes tasks concurrently — compare, copy/update/delete, report progress
 
-Statistics use lock-free atomic counters (not mutexes) for concurrent updates.
+The destination is scanned first (map needed for comparisons), then source scanning and worker processing happen concurrently. Statistics use lock-free atomic counters (not mutexes) for concurrent updates.
 
 ### Package Responsibilities
 
@@ -60,7 +60,7 @@ Statistics use lock-free atomic counters (not mutexes) for concurrent updates.
 
 ### Key Interfaces
 
-- **`storage.Backend`** (`pkg/storage/backend.go`): Abstraction over filesystem operations (List, Read, Write, Delete, Stat, etc.)
+- **`storage.Backend`** (`pkg/storage/backend.go`): Abstraction over filesystem operations (Walk, List, Read, Write, Delete, Stat, etc.). `Walk` streams entries via callback; `List` is a wrapper that collects into a slice.
 - **`compare.Comparator`** (`pkg/compare/comparator.go`): File comparison strategy with `Compare()` and `Name()`
 - **`output.Formatter`** (`pkg/output/formatter.go`): Output display with Start/Progress/Complete/Error lifecycle
 - **`logging.Logger`** (`pkg/logging/logger.go`): Structured logging with levels and fields
@@ -74,6 +74,7 @@ Handles 9 file-state combinations, conflict detection (modify-modify, delete-mod
 - **Comparison methods** trade off speed vs. accuracy: namesize (fastest, metadata only) → timestamp → hash/md5 → binary (slowest, byte-exact). The composite comparator does a quick name+size check before expensive hashing.
 - **Partial hashing** for files ≥1MB reads only the first 256KB, reducing I/O by ~95% for dissimilar files.
 - **Parallel hashing** computes source and destination hashes concurrently (1.8-1.9x speedup).
+- **Streaming scan** via `Backend.Walk()` feeds the task queue as files are discovered, eliminating the blocking `List()` call in the one-way pipeline. Bidirectional sync still uses `List()` since both sides must be fully scanned before analysis.
 - **Progress throttling** limits display updates to 20/sec max to reduce overhead.
 - Exit codes: 0 (success), 1 (partial), 2 (failed), 3 (cancelled).
 

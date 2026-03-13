@@ -1,6 +1,6 @@
 # syncnorris
 
-**Version**: v0.6.0
+**Version**: v0.6.1
 **Status**: Production-ready for one-way sync | **Experimental** for bidirectional sync
 **License**: MIT
 
@@ -86,13 +86,13 @@ Cross-platform file synchronization utility built in Go, optimized for performan
   - Supports K, M, G units (e.g., `500K`, `1G`)
   - Applied to both file copying and hash comparison
 
-### Architecture (v0.2.0)
+### Architecture (v0.2.0, enhanced v0.6.1)
 - ✅ **Producer-Consumer Pipeline**
   - Scanner (producer) populates task queue while workers process in parallel
-  - Workers start processing before scan completes
+  - **Streaming file discovery** (v0.6.1): workers start processing the first file as soon as it's found on disk, no waiting for the full directory listing
   - Each worker handles complete file lifecycle (verify → compare → copy)
   - Dynamic progress updates during scan phase
-  - Better memory efficiency (no full operation list in memory)
+  - Better memory efficiency (no full operation list or intermediate slice in memory)
 
 ### Performance Optimizations
 syncnorris has been heavily optimized and exceeds all performance targets:
@@ -607,7 +607,7 @@ syncnorris/
 
 ### Prerequisites
 
-- Go 1.21+ (uses sync/atomic and other modern features)
+- Go 1.24+ (uses sync/atomic and other modern features)
 - Make (optional but recommended)
 
 ### Building
@@ -658,6 +658,7 @@ See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for complete list.
 
 ## Roadmap
 
+- **v0.6.1**: Streaming file discovery for improved pipeline performance ✅
 - **v0.6.0**: Logging infrastructure ✅
 - **v0.7.0+**: Bisync stabilization
 - **v1.0.0**: Promote bidirectional sync to production-ready

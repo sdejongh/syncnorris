@@ -1,5 +1,40 @@
 # Changelog - syncnorris
 
+## [0.6.1] - 2026-03-13
+
+### Streaming File Discovery
+
+#### Storage Backend: `Walk` Method
+- **Implementation**: New streaming `Walk` method added to the `storage.Backend` interface
+  - Callback-based file discovery: each file is yielded as it's found by `filepath.WalkDir`
+  - Eliminates intermediate slice buffering for large directories
+  - `List` reimplemented as a thin wrapper around `Walk` (no code duplication)
+- **Files Modified**:
+  - `pkg/storage/backend.go` (added `Walk` to interface)
+  - `pkg/storage/local.go` (implemented `Walk`, refactored `List` to use `Walk`)
+
+#### Pipeline Streaming Scan
+- **Implementation**: One-way pipeline now uses `Walk` instead of `List` for both source and destination scanning
+  - **`scanSourceAndQueue`**: Files are pushed to the task queue as they're discovered on the filesystem — workers start processing immediately instead of waiting for the full directory listing
+  - **`scanDestination`**: Destination file map is built incrementally during the walk
+- **Performance Impact**:
+  - For large directories (5000+ files), workers start processing the first file as soon as it's discovered instead of waiting for the full scan to complete
+  - Reduced peak memory usage: no intermediate `[]FileInfo` slice allocation for source or destination
+  - No impact on bidirectional sync (intentionally left using `List` since both sides must be fully scanned before analysis)
+- **Files Modified**:
+  - `pkg/sync/pipeline.go` (refactored `scanDestination` and `scanSourceAndQueue` to use `Walk`)
+
+#### Before vs After
+```
+BEFORE:  WalkDir → []FileInfo (full slice) → for range → taskQueue → workers
+         \_________ blocking until complete __________/
+
+AFTER:   WalkDir → callback → taskQueue → workers
+         \_ streaming: 1st file found = 1st worker starts _/
+```
+
+---
+
 ## [0.6.0] - 2025-11-29
 
 ### Logging Infrastructure

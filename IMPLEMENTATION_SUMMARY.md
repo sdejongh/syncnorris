@@ -1,8 +1,8 @@
 # SyncNorris - Implementation Summary
 
-**Version**: v0.6.0
-**Last Updated**: 2025-11-29
-**Sessions**: Performance Optimization (2025-11-23), Architecture Refactor (2025-11-27), Differences Report Enhancement (2025-11-28), Delete Orphans Feature (2025-11-28), Windows Performance Optimization (2025-11-28), Windows Display Improvements (2025-11-28), v0.3.0 Features (2025-11-28), v0.4.0 Bidirectional Sync (2025-11-28), v0.5.0 Test Coverage (2025-11-29), v0.6.0 Logging Infrastructure (2025-11-29)
+**Version**: v0.6.1
+**Last Updated**: 2026-03-13
+**Sessions**: Performance Optimization (2025-11-23), Architecture Refactor (2025-11-27), Differences Report Enhancement (2025-11-28), Delete Orphans Feature (2025-11-28), Windows Performance Optimization (2025-11-28), Windows Display Improvements (2025-11-28), v0.3.0 Features (2025-11-28), v0.4.0 Bidirectional Sync (2025-11-28), v0.5.0 Test Coverage (2025-11-29), v0.6.0 Logging Infrastructure (2025-11-29), v0.6.1 Streaming File Discovery (2026-03-13)
 
 ## Executive Summary
 
@@ -630,4 +630,27 @@ Chaque opération fichier est tracée:
 
 ---
 
-*Dernière mise à jour: 2025-11-29*
+## Nouveautés v0.6.1 (2026-03-13)
+
+### Streaming File Discovery
+- **Problème**: `List()` accumulait tous les fichiers dans un slice avant de les retourner, bloquant le pipeline jusqu'à la fin du scan complet du filesystem
+- **Solution**: Nouvelle méthode `Walk` sur l'interface `storage.Backend`
+  - Callback-based: chaque fichier est traité dès qu'il est découvert par `filepath.WalkDir`
+  - `List` refactoré comme wrapper autour de `Walk` (élimination de la duplication)
+
+### Pipeline Streaming
+- **`scanSourceAndQueue`**: Utilise `Walk` au lieu de `List` — chaque fichier découvert est immédiatement poussé dans la task queue, les workers démarrent dès le premier fichier trouvé
+- **`scanDestination`**: Construit les maps de lookup incrémentalement pendant le walk
+- **Impact**: Pour un dossier de 5000 fichiers, le traitement commence dès le premier fichier au lieu d'attendre que les 5000 soient listés
+- **Bidirectionnel**: Non modifié (les deux côtés doivent être complètement scannés avant l'analyse)
+
+### Fichiers Modifiés
+- `pkg/storage/backend.go` — Ajout de `Walk` à l'interface `Backend`
+- `pkg/storage/local.go` — Implémentation de `Walk`, refactoring de `List`
+- `pkg/sync/pipeline.go` — `scanDestination` et `scanSourceAndQueue` utilisent `Walk`
+
+**Status**: ✅ Production-ready pour synchronisation one-way
+
+---
+
+*Dernière mise à jour: 2026-03-13*
