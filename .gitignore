@@ -47,12 +47,3 @@ config/*.yaml
 *.temp
 .cache/
 
-# Claude Code and spec-kit files (development artifacts)
-.claude/
-.specify/
-CLAUDE.md
-specs/
-docs/
-CHANGELOG.md
-IMPLEMENTATION_STATUS.md
-IMPLEMENTATION_SUMMARY.md

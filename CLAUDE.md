@@ -1,0 +1,85 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+**syncnorris** is a cross-platform file synchronization utility written in Go 1.24. It supports one-way sync (production-ready) and bidirectional sync (experimental) between directories, with multiple comparison methods and a concurrent pipeline architecture.
+
+## Build & Development Commands
+
+```bash
+make build              # Build for current platform → dist/syncnorris
+make build-all          # Cross-compile for linux/windows/darwin (amd64+arm64)
+make test               # Full test suite with race detection and coverage
+make test-unit          # Unit tests only (pkg/)
+make test-integration   # Integration tests only (tests/)
+make test-coverage      # Generate coverage.html report
+make lint               # Run go vet + golangci-lint
+make clean              # Remove build artifacts
+make run                # Run from source
+```
+
+Run a single test:
+```bash
+go test -v -run TestName ./pkg/sync/...
+```
+
+Build injects version info via ldflags (`main.version`, `main.commit`, `main.date`).
+
+## Architecture
+
+### Execution Flow
+
+CLI (Cobra) → `SyncOperation` model → `Engine` → Pipeline (one-way) or BidirectionalPipeline → `SyncReport`
+
+### Producer-Consumer Pipeline (`pkg/sync/pipeline.go`)
+
+The core sync mechanism is a producer-consumer pipeline:
+1. **Scanner** scans source and destination, applies exclude patterns, builds file maps
+2. **Task Queue** (buffered channel, capacity 1000) holds `FileTask` entries
+3. **Worker Pool** (default 5 workers) processes tasks concurrently — compare, copy/update/delete, report progress
+
+Statistics use lock-free atomic counters (not mutexes) for concurrent updates.
+
+### Package Responsibilities
+
+| Package | Role |
+|---------|------|
+| `cmd/syncnorris` | Entry point, version injection |
+| `internal/cli` | Cobra command implementations, flag parsing, validation |
+| `internal/platform` | OS-specific path handling |
+| `pkg/sync` | Engine, pipeline, workers, bidirectional logic, state persistence, exclusion |
+| `pkg/compare` | Comparator interface + implementations: hash (SHA-256), md5, binary, namesize, timestamp, composite |
+| `pkg/storage` | `Backend` interface + local filesystem implementation |
+| `pkg/models` | All data types: FileEntry, SyncOperation, SyncReport, Statistics, conflicts |
+| `pkg/output` | Formatter interface + human (progress bars), JSON, differences report |
+| `pkg/config` | YAML config loading, defaults, validation |
+| `pkg/logging` | Logger interface + file logger (with rotation) and null logger |
+| `pkg/ratelimit` | Token bucket bandwidth limiter wrapping io.ReadCloser |
+
+### Key Interfaces
+
+- **`storage.Backend`** (`pkg/storage/backend.go`): Abstraction over filesystem operations (List, Read, Write, Delete, Stat, etc.)
+- **`compare.Comparator`** (`pkg/compare/comparator.go`): File comparison strategy with `Compare()` and `Name()`
+- **`output.Formatter`** (`pkg/output/formatter.go`): Output display with Start/Progress/Complete/Error lifecycle
+- **`logging.Logger`** (`pkg/logging/logger.go`): Structured logging with levels and fields
+
+### Bidirectional Sync (`pkg/sync/bidirectional.go`)
+
+Handles 9 file-state combinations, conflict detection (modify-modify, delete-modify, create-create), conflict resolution strategies (newer, source-wins, dest-wins, both), and optional state persistence via JSON files (~/.syncnorris/state) for incremental change detection.
+
+## Key Design Decisions
+
+- **Comparison methods** trade off speed vs. accuracy: namesize (fastest, metadata only) → timestamp → hash/md5 → binary (slowest, byte-exact). The composite comparator does a quick name+size check before expensive hashing.
+- **Partial hashing** for files ≥1MB reads only the first 256KB, reducing I/O by ~95% for dissimilar files.
+- **Parallel hashing** computes source and destination hashes concurrently (1.8-1.9x speedup).
+- **Progress throttling** limits display updates to 20/sec max to reduce overhead.
+- Exit codes: 0 (success), 1 (partial), 2 (failed), 3 (cancelled).
+
+## Dependencies
+
+- `github.com/spf13/cobra` — CLI framework
+- `github.com/cheggaaa/pb/v3` — Progress bars
+- `github.com/google/uuid` — ID generation
+- `gopkg.in/yaml.v3` — YAML config parsing
