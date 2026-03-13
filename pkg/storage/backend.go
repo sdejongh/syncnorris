@@ -22,6 +22,11 @@ type Backend interface {
 	// List returns all files in the specified directory recursively
 	List(ctx context.Context, path string) ([]FileInfo, error)
 
+	// Walk iterates over all files in the specified directory recursively,
+	// calling fn for each file/directory found. This allows streaming processing
+	// without buffering the entire file list in memory.
+	Walk(ctx context.Context, path string, fn func(FileInfo) error) error
+
 	// Read opens a file for reading
 	Read(ctx context.Context, path string) (io.ReadCloser, error)
 

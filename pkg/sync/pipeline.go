@@ -253,44 +253,33 @@ func (p *Pipeline) Run(ctx context.Context) (*models.SyncReport, error) {
 
 // scanDestination scans the destination and builds a lookup map
 func (p *Pipeline) scanDestination(ctx context.Context) error {
-	destFiles, err := p.dest.List(ctx, "")
-	if err != nil {
-		return err
-	}
-
 	p.destFilesMu.Lock()
 	defer p.destFilesMu.Unlock()
 
-	for i := range destFiles {
-		// Apply exclude patterns
-		if shouldExclude(destFiles[i].RelativePath, p.operation.ExcludePatterns) {
-			continue
+	return p.dest.Walk(ctx, "", func(fi storage.FileInfo) error {
+		if shouldExclude(fi.RelativePath, p.operation.ExcludePatterns) {
+			return nil
 		}
 
-		if destFiles[i].IsDir {
-			// Skip root directory
-			if destFiles[i].RelativePath != "." {
-				p.destDirs[destFiles[i].RelativePath] = &destFiles[i]
+		entry := fi // copy to avoid pointer aliasing
+		if entry.IsDir {
+			if entry.RelativePath != "." {
+				p.destDirs[entry.RelativePath] = &entry
 			}
 		} else {
-			p.destFiles[destFiles[i].RelativePath] = &destFiles[i]
+			p.destFiles[entry.RelativePath] = &entry
 		}
-	}
 
-	return nil
+		return nil
+	})
 }
 
 // scanSourceAndQueue scans source files and adds them to the queue
 func (p *Pipeline) scanSourceAndQueue(ctx context.Context, report *models.SyncReport) error {
-	sourceFiles, err := p.source.List(ctx, "")
-	if err != nil {
-		return err
-	}
-
-	for _, f := range sourceFiles {
+	return p.source.Walk(ctx, "", func(f storage.FileInfo) error {
 		// Skip directories
 		if f.IsDir {
-			continue
+			return nil
 		}
 
 		// Apply exclude patterns
@@ -316,7 +305,7 @@ func (p *Pipeline) scanSourceAndQueue(ctx context.Context, report *models.SyncRe
 				},
 			})
 			p.resultsMu.Unlock()
-			continue
+			return nil
 		}
 
 		// Update totals
@@ -326,9 +315,9 @@ func (p *Pipeline) scanSourceAndQueue(ctx context.Context, report *models.SyncRe
 		// Update formatter with new totals
 		if p.formatter != nil {
 			p.formatter.Progress(output.ProgressUpdate{
-				Type:            "scan_progress",
-				TotalFiles:      int(p.totalFiles.Load()),
-				TotalBytes:      p.totalBytes.Load(),
+				Type:       "scan_progress",
+				TotalFiles: int(p.totalFiles.Load()),
+				TotalBytes: p.totalBytes.Load(),
 			})
 		}
 
@@ -339,12 +328,9 @@ func (p *Pipeline) scanSourceAndQueue(ctx context.Context, report *models.SyncRe
 		case <-ctx.Done():
 			return ctx.Err()
 		case p.taskQueue <- task:
-			// Task added to queue
+			return nil
 		}
-	}
-
-	// Store source stats
-	return nil
+	})
 }
 
 // runWorker is the worker goroutine that processes tasks

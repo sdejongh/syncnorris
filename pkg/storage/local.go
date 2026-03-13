@@ -33,25 +33,18 @@ func NewLocal(rootPath string) (*Local, error) {
 	return &Local{rootPath: absPath}, nil
 }
 
-// List returns all files in the directory recursively
-// Continues on permission errors, skipping inaccessible files/directories
-func (l *Local) List(ctx context.Context, path string) ([]FileInfo, error) {
+// Walk iterates over files recursively, calling fn for each entry found.
+func (l *Local) Walk(ctx context.Context, path string, fn func(FileInfo) error) error {
 	fullPath := filepath.Join(l.rootPath, path)
-	var files []FileInfo
 
-	err := filepath.WalkDir(fullPath, func(p string, d fs.DirEntry, err error) error {
-		// Handle permission denied and other errors during directory traversal
+	return filepath.WalkDir(fullPath, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
-			// Skip inaccessible directories/files rather than aborting
-			// The file/directory will be missing from the list, which will be
-			// handled at the sync level as appropriate
 			if d != nil && d.IsDir() {
-				return fs.SkipDir // Skip this directory and continue
+				return fs.SkipDir
 			}
-			return nil // Skip this file and continue
+			return nil
 		}
 
-		// Check context cancellation
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -60,18 +53,15 @@ func (l *Local) List(ctx context.Context, path string) ([]FileInfo, error) {
 
 		relPath, err := filepath.Rel(l.rootPath, p)
 		if err != nil {
-			// Should not happen in normal circumstances, but skip this entry
 			return nil
 		}
 
 		info, err := d.Info()
 		if err != nil {
-			// Cannot get file info - skip this entry
-			// This can happen with permission issues on the file itself
 			return nil
 		}
 
-		files = append(files, FileInfo{
+		return fn(FileInfo{
 			Path:         p,
 			Size:         info.Size(),
 			ModTime:      info.ModTime(),
@@ -79,10 +69,18 @@ func (l *Local) List(ctx context.Context, path string) ([]FileInfo, error) {
 			Permissions:  uint32(info.Mode().Perm()),
 			RelativePath: relPath,
 		})
+	})
+}
 
+// List returns all files in the directory recursively
+// Continues on permission errors, skipping inaccessible files/directories
+func (l *Local) List(ctx context.Context, path string) ([]FileInfo, error) {
+	var files []FileInfo
+
+	err := l.Walk(ctx, path, func(fi FileInfo) error {
+		files = append(files, fi)
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to list files: %w", err)
 	}
