@@ -37,6 +37,11 @@ type RunningStats struct {
 	Errors  int
 }
 
+// Total returns the total number of completed files.
+func (s RunningStats) Total() int {
+	return s.Copied + s.Updated + s.Skipped + s.Errors
+}
+
 // ProgressState holds current progress for the UI
 type ProgressState struct {
 	Fraction    float32
@@ -56,18 +61,14 @@ type UIEvent struct {
 }
 
 // fileState tracks the event sequence for a single file.
-// The pipeline sends events in a specific order that reveals the action:
-//   COPY:   file_start → file_complete  (no compare phase)
-//   UPDATE: compare_start → file_start → file_complete  (both phases)
-//   SKIP:   compare_start → file_complete  (compare only, no copy)
 type fileState struct {
 	hadCompare bool
 	hadCopy    bool
 }
 
 // GUIFormatter implements output.Formatter for the GUI.
-// It tracks per-file state to infer the action (COPY/UPDATE/SKIP) from the
-// event sequence the pipeline sends.
+// Progress fraction is based on completed files (stats totals) so it
+// never regresses even when concurrent workers send events out of order.
 type GUIFormatter struct {
 	events     chan<- UIEvent
 	totalFiles int
@@ -78,10 +79,8 @@ type GUIFormatter struct {
 	stats RunningStats
 }
 
-// Compile-time check
 var _ output.Formatter = (*GUIFormatter)(nil)
 
-// NewGUIFormatter creates a formatter that sends events to the GUI
 func NewGUIFormatter(events chan<- UIEvent) *GUIFormatter {
 	return &GUIFormatter{
 		events: events,
@@ -105,22 +104,24 @@ func (f *GUIFormatter) Progress(update output.ProgressUpdate) error {
 
 	switch update.Type {
 	case "scan_progress":
-		f.sendProgressUpdate(0, 0, update.TotalFiles, "Scanning...")
+		f.sendProgress(0, update.TotalFiles, "Scanning...")
 
 	case "compare_start":
 		f.mu.Lock()
 		f.getOrCreateFile(update.FilePath).hadCompare = true
 		f.mu.Unlock()
-		f.sendProgressUpdate(f.fraction(update.CurrentFile), update.CurrentFile, f.totalFiles, update.FilePath)
+		// Progress fraction stays at current completed count — no change
+		f.sendCurrentProgress(update.FilePath)
 
 	case "file_start":
 		f.mu.Lock()
 		f.getOrCreateFile(update.FilePath).hadCopy = true
 		f.mu.Unlock()
-		f.sendProgressUpdate(f.fraction(update.CurrentFile), update.CurrentFile, f.totalFiles, update.FilePath)
+		f.sendCurrentProgress(update.FilePath)
 
 	case "file_progress":
-		f.sendProgressUpdate(f.fraction(update.CurrentFile), update.CurrentFile, f.totalFiles, update.FilePath)
+		// No fraction change for in-progress files, just update the path
+		f.sendCurrentProgress(update.FilePath)
 
 	case "file_complete":
 		f.mu.Lock()
@@ -140,7 +141,7 @@ func (f *GUIFormatter) Progress(update output.ProgressUpdate) error {
 		f.mu.Unlock()
 
 		f.sendLog(action, fmt.Sprintf("%s (%s)", update.FilePath, formatSize(update.TotalBytes)))
-		f.sendProgressUpdateWithStats(f.fraction(update.CurrentFile), update.CurrentFile, f.totalFiles, update.FilePath, stats)
+		f.sendProgressWithStats(stats, update.FilePath)
 
 	case "file_error":
 		f.mu.Lock()
@@ -154,23 +155,22 @@ func (f *GUIFormatter) Progress(update output.ProgressUpdate) error {
 			msg = fmt.Sprintf("%s: %v", update.FilePath, update.Error)
 		}
 		f.sendLog("ERROR", msg)
-		f.sendProgressUpdateWithStats(f.fraction(update.CurrentFile), update.CurrentFile, f.totalFiles, "", stats)
+		f.sendProgressWithStats(stats, "")
 	}
 	return nil
 }
 
-// resolveAction determines the action from the tracked file state
 func resolveAction(state *fileState) string {
 	if state == nil {
 		return "DONE"
 	}
 	switch {
 	case state.hadCopy && !state.hadCompare:
-		return "COPY" // new file — went straight to copy
+		return "COPY"
 	case state.hadCopy && state.hadCompare:
-		return "UPDATE" // existing file — compared, found different, then copied
+		return "UPDATE"
 	case !state.hadCopy && state.hadCompare:
-		return "SKIP" // existing file — compared, found identical
+		return "SKIP"
 	default:
 		return "DONE"
 	}
@@ -226,19 +226,55 @@ func (f *GUIFormatter) sendLog(level, message string) {
 	})
 }
 
-func (f *GUIFormatter) sendProgressUpdate(fraction float32, current, total int, path string) {
+// sendProgress sends a progress event with the given completed/total and path.
+func (f *GUIFormatter) sendProgress(completed, total int, path string) {
+	frac := float32(0)
+	if total > 0 {
+		frac = float32(completed) / float32(total)
+		if frac > 1 {
+			frac = 1
+		}
+	}
 	f.mu.Lock()
 	stats := f.stats
 	f.mu.Unlock()
-	f.sendProgressUpdateWithStats(fraction, current, total, path, stats)
-}
-
-func (f *GUIFormatter) sendProgressUpdateWithStats(fraction float32, current, total int, path string, stats RunningStats) {
 	f.send(UIEvent{
 		Type: eventProgress,
 		Progress: &ProgressState{
-			Fraction:    fraction,
-			CurrentFile: current,
+			Fraction:    frac,
+			CurrentFile: completed,
+			TotalFiles:  total,
+			CurrentPath: path,
+			Stats:       stats,
+		},
+	})
+}
+
+// sendCurrentProgress sends progress based on the current completed file count from stats.
+func (f *GUIFormatter) sendCurrentProgress(path string) {
+	f.mu.Lock()
+	stats := f.stats
+	f.mu.Unlock()
+	f.sendProgressWithStats(stats, path)
+}
+
+// sendProgressWithStats computes fraction from stats.Total() (completed files).
+// This ensures the progress bar never regresses.
+func (f *GUIFormatter) sendProgressWithStats(stats RunningStats, path string) {
+	completed := stats.Total()
+	total := f.totalFiles
+	frac := float32(0)
+	if total > 0 {
+		frac = float32(completed) / float32(total)
+		if frac > 1 {
+			frac = 1
+		}
+	}
+	f.send(UIEvent{
+		Type: eventProgress,
+		Progress: &ProgressState{
+			Fraction:    frac,
+			CurrentFile: completed,
 			TotalFiles:  total,
 			CurrentPath: path,
 			Stats:       stats,
@@ -251,17 +287,6 @@ func (f *GUIFormatter) send(ev UIEvent) {
 	case f.events <- ev:
 	default:
 	}
-}
-
-func (f *GUIFormatter) fraction(current int) float32 {
-	if f.totalFiles <= 0 {
-		return 0
-	}
-	frac := float32(current) / float32(f.totalFiles)
-	if frac > 1 {
-		frac = 1
-	}
-	return frac
 }
 
 func formatSize(bytes int64) string {

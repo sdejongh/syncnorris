@@ -1,5 +1,10 @@
 # Changelog - syncnorris
 
+## [0.7.1] - 2026-03-14
+
+### Bug Fixes
+- **GUI**: Fix progress bar flickering — fraction now based on completed file count (monotonic) instead of per-worker file index which arrived out of order from concurrent workers (fixes #2)
+
 ## [0.7.0] - 2026-03-14
 
 ### Cross-Platform GUI
