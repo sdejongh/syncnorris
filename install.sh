@@ -21,10 +21,10 @@ detect_platform() {
 
     case "$os" in
         linux*)
-            OS="Linux"
+            OS="linux"
             ;;
         darwin*)
-            OS="Darwin"
+            OS="darwin"
             ;;
         *)
             echo -e "${RED}Error: Unsupported operating system: $os${NC}"
@@ -36,7 +36,7 @@ detect_platform() {
 
     case "$arch" in
         x86_64|amd64)
-            ARCH="x86_64"
+            ARCH="amd64"
             ;;
         aarch64|arm64)
             ARCH="arm64"
@@ -47,7 +47,10 @@ detect_platform() {
             ;;
     esac
 
-    echo -e "${GREEN}Detected platform: ${OS}_${ARCH}${NC}"
+    # Build the platform suffix used in archive names (e.g. linux-amd64, darwin-arm64)
+    SUFFIX="${OS}-${ARCH}"
+
+    echo -e "${GREEN}Detected platform: ${SUFFIX}${NC}"
 }
 
 # Get latest release version
@@ -75,9 +78,7 @@ get_latest_version() {
 
 # Download and extract archive
 download_and_extract() {
-    # Remove 'v' prefix from version for filename (GoReleaser uses version without 'v')
-    local version_number="${VERSION#v}"
-    local archive_name="${BINARY_NAME}_${version_number}_${OS}_${ARCH}.tar.gz"
+    local archive_name="${BINARY_NAME}_${VERSION}_${SUFFIX}.tar.gz"
     local download_url="https://github.com/${REPO}/releases/download/${VERSION}/${archive_name}"
     local tmp_dir=$(mktemp -d)
 

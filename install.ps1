@@ -22,7 +22,7 @@ function Write-ColorOutput {
 function Get-Architecture {
     $arch = $env:PROCESSOR_ARCHITECTURE
     switch ($arch) {
-        "AMD64" { return "x86_64" }
+        "AMD64" { return "amd64" }
         "ARM64" { return "arm64" }
         default {
             Write-ColorOutput "Error: Unsupported architecture: $arch" "Red"
@@ -61,9 +61,7 @@ function Install-Syncnorris {
         [string]$Arch
     )
 
-    # Remove 'v' prefix from version for filename (GoReleaser uses version without 'v')
-    $versionNumber = $Version -replace '^v', ''
-    $archiveName = "syncnorris_${versionNumber}_Windows_${Arch}.zip"
+    $archiveName = "syncnorris_${Version}_windows-${Arch}.zip"
     $downloadUrl = "https://github.com/$Repo/releases/download/$Version/$archiveName"
     $tempDir = [System.IO.Path]::GetTempPath()
     $archivePath = Join-Path $tempDir $archiveName
