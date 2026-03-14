@@ -92,3 +92,21 @@ Cross-platform graphical interface built with Gio (`gioui.org`), launched via `s
 - `gopkg.in/yaml.v3` — YAML config parsing
 - `gioui.org` — Cross-platform GUI framework (Wayland, X11, Windows, macOS)
 - `github.com/ncruces/zenity` — Native OS file/directory dialogs
+
+## GUI Build Notes
+
+- Gio requires system libs on Linux: `sudo apt install libwayland-dev libwayland-egl1 libxkbcommon-dev libxkbcommon-x11-dev libx11-dev libx11-xcb-dev libxcursor-dev libxfixes-dev libgles2-mesa-dev libegl1-mesa-dev libvulkan-dev`
+- All files in `internal/gui/` have `//go:build !nogui` — excluded with `-tags nogui` for `CGO_ENABLED=0` cross-compilation
+- Gio `app.MinSize()` panics if width or height is 0
+- Wayland compositors may ignore programmatic `app.Size()` resize requests
+- Windows `-H windowsgui` ldflags hides the console entirely — breaks CLI, don't use for dual-mode binaries
+- CI uses native matrix builds (not GoReleaser) — one runner per OS for CGo support
+- GitHub runners: use `macos-15` (not macos-13), `ubuntu-24.04-arm` for ARM64
+
+## Release Workflow
+
+Tags matching `v*` trigger `.github/workflows/release.yml`:
+1. `test` job on ubuntu with GUI libs installed
+2. `build` matrix: linux/{amd64,arm64}, darwin/{amd64,arm64}, windows/amd64
+3. `release` job: collect archives, checksums, create GitHub release
+Archive naming: `syncnorris_v{VERSION}_{os}-{arch}.tar.gz` (or `.zip` for Windows)
