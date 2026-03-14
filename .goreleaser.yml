@@ -3,13 +3,15 @@ before:
   hooks:
     # Vérifier que les dépendances sont à jour
     - go mod tidy
-    # Exécuter les tests avant la release
-    - go test ./...
+    # Exécuter les tests avant la release (nogui: pas de libs graphiques en CI)
+    - go test -tags nogui ./...
 
 builds:
   - id: syncnorris
     main: ./cmd/syncnorris
     binary: syncnorris
+    tags:
+      - nogui  # Builds CLI-only (pas de GUI Gio sans libs système)
     env:
       - CGO_ENABLED=0  # Binaires statiques sans dépendances C
     goos:
