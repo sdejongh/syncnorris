@@ -472,9 +472,6 @@ func (a *appState) layoutActions(gtx C) D {
 // --- Progress ---
 
 func (a *appState) layoutProgress(gtx C) D {
-	if !a.isRunning && a.progress.Fraction == 0 {
-		return D{}
-	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx C) D {
 			bar := material.ProgressBar(a.theme, a.progress.Fraction)
