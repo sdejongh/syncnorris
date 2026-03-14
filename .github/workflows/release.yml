@@ -46,13 +46,13 @@ jobs:
             suffix: linux-arm64
             archive: tar.gz
             cgo: '1'
-          - os: macos-13
+          - os: macos-15
             goos: darwin
             goarch: amd64
             suffix: darwin-amd64
             archive: tar.gz
             cgo: '1'
-          - os: macos-latest
+          - os: macos-15
             goos: darwin
             goarch: arm64
             suffix: darwin-arm64
