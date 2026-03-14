@@ -38,7 +38,14 @@ Running without a subcommand launches the graphical user interface.`,
 		Version:       version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		RunE:          cli.DefaultRunE,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Launch GUI only when invoked with no arguments at all.
+			// Any flag (--help, --version, --verbose, etc.) falls through to help.
+			if len(os.Args) == 1 {
+				return cli.DefaultRunE(cmd, args)
+			}
+			return cmd.Help()
+		},
 	}
 
 	// Add global flags

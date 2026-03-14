@@ -1,5 +1,11 @@
 # Changelog - syncnorris
 
+## [0.7.7] - 2026-03-14
+
+### Bug Fixes
+- **CLI**: Fix CLI broken by v0.7.6 — `--help`, `--version`, `sync`, `compare` now work correctly again. GUI only launches when invoked with zero arguments (#13)
+- **Windows**: Remove `-H windowsgui` that hid the console and broke all CLI output on Windows (#13)
+
 ## [0.7.6] - 2026-03-14
 
 ### Improvements
