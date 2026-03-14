@@ -61,10 +61,11 @@ type UIEvent struct {
 	Error    error
 }
 
-// fileState tracks the event sequence for a single file.
+// fileState tracks the event sequence and in-flight bytes for a single file.
 type fileState struct {
-	hadCompare bool
-	hadCopy    bool
+	hadCompare   bool
+	hadCopy      bool
+	bytesWritten int64 // latest BytesWritten from file_progress
 }
 
 // GUIFormatter implements output.Formatter for the GUI.
@@ -122,7 +123,11 @@ func (f *GUIFormatter) Progress(update output.ProgressUpdate) error {
 		f.sendCurrentProgress(update.FilePath)
 
 	case "file_progress":
-		// No fraction change for in-progress files, just update the path
+		f.mu.Lock()
+		if s := f.files[update.FilePath]; s != nil {
+			s.bytesWritten = update.BytesWritten
+		}
+		f.mu.Unlock()
 		f.sendCurrentProgress(update.FilePath)
 
 	case "file_complete":
@@ -141,11 +146,10 @@ func (f *GUIFormatter) Progress(update output.ProgressUpdate) error {
 		}
 		f.bytesTransferred += update.TotalBytes
 		stats := f.stats
-		bytes := f.bytesTransferred
 		f.mu.Unlock()
 
 		f.sendLog(action, fmt.Sprintf("%s (%s)", update.FilePath, formatSize(update.TotalBytes)))
-		f.sendProgressWithStatsAndBytes(stats, bytes, update.FilePath)
+		f.sendProgressWithStats(stats, update.FilePath)
 
 	case "file_error":
 		f.mu.Lock()
@@ -214,6 +218,16 @@ func (f *GUIFormatter) Error(err error) error {
 	return nil
 }
 
+// totalBytesProcessed returns bytesTransferred (completed) + sum of in-flight bytes.
+// Caller must hold f.mu.
+func (f *GUIFormatter) totalBytesProcessed() int64 {
+	total := f.bytesTransferred
+	for _, s := range f.files {
+		total += s.bytesWritten
+	}
+	return total
+}
+
 func (f *GUIFormatter) getOrCreateFile(path string) *fileState {
 	s := f.files[path]
 	if s == nil {
@@ -241,7 +255,7 @@ func (f *GUIFormatter) sendProgress(completed, total int, path string) {
 	}
 	f.mu.Lock()
 	stats := f.stats
-	bytes := f.bytesTransferred
+	bytes := f.totalBytesProcessed()
 	f.mu.Unlock()
 	f.send(UIEvent{
 		Type: eventProgress,
@@ -256,24 +270,41 @@ func (f *GUIFormatter) sendProgress(completed, total int, path string) {
 	})
 }
 
-// sendCurrentProgress sends progress based on the current completed file count from stats.
+// sendCurrentProgress sends progress based on current completed files and in-flight bytes.
 func (f *GUIFormatter) sendCurrentProgress(path string) {
 	f.mu.Lock()
 	stats := f.stats
+	bytes := f.totalBytesProcessed()
+	completed := stats.Total()
 	f.mu.Unlock()
-	f.sendProgressWithStats(stats, path)
+
+	total := f.totalFiles
+	frac := float32(0)
+	if total > 0 {
+		frac = float32(completed) / float32(total)
+		if frac > 1 {
+			frac = 1
+		}
+	}
+	f.send(UIEvent{
+		Type: eventProgress,
+		Progress: &ProgressState{
+			Fraction:         frac,
+			CurrentFile:      completed,
+			TotalFiles:       total,
+			CurrentPath:      path,
+			Stats:            stats,
+			BytesTransferred: bytes,
+		},
+	})
 }
 
-// sendProgressWithStats computes fraction from stats.Total() (completed files).
+// sendProgressWithStats sends progress with pre-computed stats.
 func (f *GUIFormatter) sendProgressWithStats(stats RunningStats, path string) {
 	f.mu.Lock()
-	bytes := f.bytesTransferred
+	bytes := f.totalBytesProcessed()
 	f.mu.Unlock()
-	f.sendProgressWithStatsAndBytes(stats, bytes, path)
-}
 
-// sendProgressWithStatsAndBytes sends a progress event with all data.
-func (f *GUIFormatter) sendProgressWithStatsAndBytes(stats RunningStats, bytes int64, path string) {
 	completed := stats.Total()
 	total := f.totalFiles
 	frac := float32(0)

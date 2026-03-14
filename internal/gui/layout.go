@@ -562,8 +562,8 @@ func (a *appState) layoutBandwidth(gtx C) D {
 				})
 			}
 
-			// Find max value for Y scale
-			maxVal := float64(0)
+			// Find max value for Y scale (include average so line is always visible)
+			maxVal := avg
 			for _, s := range samples {
 				if s.BytesPerSec > maxVal {
 					maxVal = s.BytesPerSec
@@ -613,6 +613,27 @@ func (a *appState) layoutBandwidth(gtx C) D {
 			lineColor.A = 0xa0
 			paint.FillShape(gtx.Ops, lineColor,
 				clip.Stroke{Path: linePath.End(), Width: float32(gtx.Dp(unit.Dp(1.5)))}.Op())
+
+			// Average line (dashed red) — simulated with short segments
+			if avg > 0 {
+				avgY := float32(h) - float32(h)*float32(avg/maxVal)
+				dashLen := float32(gtx.Dp(unit.Dp(6)))
+				gapLen := float32(gtx.Dp(unit.Dp(4)))
+				x := float32(0)
+				for x < float32(w) {
+					endX := x + dashLen
+					if endX > float32(w) {
+						endX = float32(w)
+					}
+					var dash clip.Path
+					dash.Begin(gtx.Ops)
+					dash.MoveTo(f32Point(x, avgY))
+					dash.LineTo(f32Point(endX, avgY))
+					paint.FillShape(gtx.Ops, colorError,
+						clip.Stroke{Path: dash.End(), Width: float32(gtx.Dp(unit.Dp(1)))}.Op())
+					x = endX + gapLen
+				}
+			}
 
 			// Border around the graph
 			paint.FillShape(gtx.Ops, colorBorder,

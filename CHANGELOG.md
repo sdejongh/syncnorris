@@ -1,5 +1,11 @@
 # Changelog - syncnorris
 
+## [0.7.5] - 2026-03-14
+
+### Bug Fixes
+- **GUI**: Bandwidth graph now shows real-time data by tracking in-flight bytes from `file_progress` events, not just completed file totals — eliminates the spiky pattern (#10)
+- **GUI**: Added dashed red average line on the bandwidth graph for visual reference (#10)
+
 ## [0.7.4] - 2026-03-14
 
 ### Bug Fixes
