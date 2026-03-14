@@ -56,6 +56,7 @@ Cross-platform file synchronization utility built in Go, optimized for performan
   - Source/destination selection: text input, native browse dialog, or path history dropdown
   - All one-way sync options: comparison method, workers, excludes, dry run, delete orphans, create destination
   - Real-time progress bar with running stats (copied/updated/identical/errors)
+  - Live bandwidth graph (60-second sliding window) with current speed, average speed, and dashed average line
   - Color-coded activity log with per-file action tracking (COPY/UPDATE/SKIP/ERROR)
   - Settings and path history (last 10 source + destination) persisted in `~/.config/syncnorris/gui-settings.json`
   - Resizable width (log panel adapts), fixed height
