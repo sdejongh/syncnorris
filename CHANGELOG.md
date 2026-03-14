@@ -1,5 +1,22 @@
 # Changelog - syncnorris
 
+## [0.7.0] - 2026-03-14
+
+### Cross-Platform GUI
+
+- **Graphical user interface** launched via `syncnorris gui`
+  - Built with Gio (`gioui.org`) for native rendering on Wayland, X11, Windows, macOS
+  - Single binary, no runtime dependencies beyond system display libraries
+- **Two-column layout**: fixed-width config panel (left) + tabbed right panel (Logs tab)
+- **Full sync configuration**: source/destination paths, comparison method, workers, exclude patterns, dry run, delete orphans, create destination
+- **Real-time progress**: progress bar with running stats (copied/updated/identical/errors), color-coded activity log with per-file action tracking (COPY/UPDATE/SKIP/ERROR)
+- **Path history**: last 10 source and destination paths saved, accessible via dropdown (▼ button)
+- **Native directory picker**: OS file dialogs via `github.com/ncruces/zenity`
+- **Settings persistence**: all options saved to `~/.config/syncnorris/gui-settings.json` (or platform equivalent), loaded on startup
+- **Resizable**: window width expandable (log panel adapts), fixed height
+- **Cancel support**: running operations can be cancelled
+- **Build tags**: `make build` includes GUI; `make build-all` uses `-tags nogui` for headless cross-compilation (CLI-only stub)
+
 ## [0.6.1] - 2026-03-13
 
 ### Streaming File Discovery
