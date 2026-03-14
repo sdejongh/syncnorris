@@ -186,9 +186,9 @@ The installer will automatically:
 Download the latest release for your platform from the [Releases page](https://github.com/sdejongh/syncnorris/releases):
 
 1. Download the archive for your platform:
-   - **Linux**: `syncnorris_VERSION_Linux_x86_64.tar.gz` or `syncnorris_VERSION_Linux_arm64.tar.gz`
-   - **macOS**: `syncnorris_VERSION_Darwin_x86_64.tar.gz` or `syncnorris_VERSION_Darwin_arm64.tar.gz`
-   - **Windows**: `syncnorris_VERSION_Windows_x86_64.zip`
+   - **Linux**: `syncnorris_vVERSION_linux-amd64.tar.gz` or `syncnorris_vVERSION_linux-arm64.tar.gz`
+   - **macOS**: `syncnorris_vVERSION_darwin-amd64.tar.gz` or `syncnorris_vVERSION_darwin-arm64.tar.gz`
+   - **Windows**: `syncnorris_vVERSION_windows-amd64.zip`
 
 2. Extract the archive
 3. Move the binary to a directory in your PATH:
