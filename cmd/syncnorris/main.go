@@ -46,6 +46,7 @@ network shares, and remote storage with multiple comparison methods.`,
 	rootCmd.AddCommand(cli.NewCompareCommand())
 	rootCmd.AddCommand(cli.NewConfigCommand())
 	rootCmd.AddCommand(cli.NewVersionCommand())
+	rootCmd.AddCommand(cli.NewGUICommand())
 
 	return rootCmd.Execute()
 }

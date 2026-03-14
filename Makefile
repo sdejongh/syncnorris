@@ -20,11 +20,11 @@ build:
 .PHONY: build-all
 build-all:
 	@mkdir -p $(BUILD_DIR)
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/syncnorris-linux-amd64 cmd/syncnorris/main.go
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/syncnorris-linux-arm64 cmd/syncnorris/main.go
-	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/syncnorris-windows-amd64.exe cmd/syncnorris/main.go
-	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/syncnorris-darwin-amd64 cmd/syncnorris/main.go
-	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/syncnorris-darwin-arm64 cmd/syncnorris/main.go
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags nogui -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/syncnorris-linux-amd64 cmd/syncnorris/main.go
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags nogui -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/syncnorris-linux-arm64 cmd/syncnorris/main.go
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -tags nogui -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/syncnorris-windows-amd64.exe cmd/syncnorris/main.go
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -tags nogui -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/syncnorris-darwin-amd64 cmd/syncnorris/main.go
+	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -tags nogui -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/syncnorris-darwin-arm64 cmd/syncnorris/main.go
 
 .PHONY: test
 test:
