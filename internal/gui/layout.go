@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"time"
 
 	"gioui.org/font"
 	"gioui.org/layout"
+	"gioui.org/op"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
 	"gioui.org/unit"
@@ -485,12 +487,13 @@ func (a *appState) layoutProgress(gtx C) D {
 			if a.progress.TotalFiles > 0 {
 				info += fmt.Sprintf("  |  %d / %d files", a.progress.CurrentFile, a.progress.TotalFiles)
 			}
-			if a.progress.CurrentPath != "" {
-				path := a.progress.CurrentPath
-				if len(path) > 45 {
-					path = "..." + path[len(path)-42:]
-				}
-				info += fmt.Sprintf("  |  %s", path)
+			if a.isRunning {
+				dots := int(gtx.Now.UnixMilli()/500) % 4 // cycle 0..3 every 500ms
+				info += fmt.Sprintf("  |  Processing%s", "...."[:dots+1])
+				// Request continuous redraw for animation
+				gtx.Execute(op.InvalidateCmd{At: gtx.Now.Add(500 * time.Millisecond)})
+			} else if a.progress.Fraction >= 1 {
+				info += "  |  Done"
 			}
 			lbl := material.Caption(a.theme, info)
 			lbl.Color = colorTextMuted
