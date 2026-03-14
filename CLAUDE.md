@@ -32,6 +32,7 @@ Build injects version info via ldflags (`main.version`, `main.commit`, `main.dat
 ### Execution Flow
 
 CLI (Cobra) → `SyncOperation` model → `Engine` → Pipeline (one-way) or BidirectionalPipeline → `SyncReport`
+GUI (Gio)  → `appState` widgets → `RunOptions` → `runSync()` → `Engine` → `GUIFormatter` → UI channel → `appState`
 
 ### Producer-Consumer Pipeline (`pkg/sync/pipeline.go`)
 
@@ -48,6 +49,7 @@ The destination is scanned first (map needed for comparisons), then source scann
 |---------|------|
 | `cmd/syncnorris` | Entry point, version injection |
 | `internal/cli` | Cobra command implementations, flag parsing, validation |
+| `internal/gui` | Gio-based GUI: app state/event loop, layout, formatter bridge, runner, settings persistence, theme |
 | `internal/platform` | OS-specific path handling |
 | `pkg/sync` | Engine, pipeline, workers, bidirectional logic, state persistence, exclusion |
 | `pkg/compare` | Comparator interface + implementations: hash (SHA-256), md5, binary, namesize, timestamp, composite |
@@ -78,9 +80,15 @@ Handles 9 file-state combinations, conflict detection (modify-modify, delete-mod
 - **Progress throttling** limits display updates to 20/sec max to reduce overhead.
 - Exit codes: 0 (success), 1 (partial), 2 (failed), 3 (cancelled).
 
+### GUI (`internal/gui/`)
+
+Cross-platform graphical interface built with Gio (`gioui.org`), launched via `syncnorris gui`. Two-column layout: fixed-width config panel (left) + tabbed right panel (currently "Logs" tab). The GUI reuses the existing `Engine`/`Pipeline` layers via a `GUIFormatter` that implements `output.Formatter` and pushes events to the UI through a channel. Per-file action tracking (COPY/UPDATE/SKIP) is inferred from the pipeline event sequence (`compare_start`/`file_start`/`file_complete`). Settings and path history (last 10) are persisted in `~/.config/syncnorris/gui-settings.json` (or platform equivalent via `os.UserConfigDir()`). Directory picking uses `github.com/ncruces/zenity` for native OS dialogs. The `gui` CLI command uses build tag `!nogui`; cross-compiled headless builds use `-tags nogui` with a stub command.
+
 ## Dependencies
 
 - `github.com/spf13/cobra` — CLI framework
 - `github.com/cheggaaa/pb/v3` — Progress bars
 - `github.com/google/uuid` — ID generation
 - `gopkg.in/yaml.v3` — YAML config parsing
+- `gioui.org` — Cross-platform GUI framework (Wayland, X11, Windows, macOS)
+- `github.com/ncruces/zenity` — Native OS file/directory dialogs

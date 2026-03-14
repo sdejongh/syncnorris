@@ -48,7 +48,20 @@ Cross-platform file synchronization utility built in Go, optimized for performan
   - Faster than hash-based comparison
   - Suitable when you trust timestamps haven't been manipulated
 
-### User Interface
+### Graphical User Interface (GUI)
+- ✅ **Cross-platform GUI** (`syncnorris gui`)
+  - Built with Gio — native rendering on Wayland, X11, Windows, macOS
+  - Single binary, no runtime dependencies
+  - Two-column layout: config panel (left) + tabbed right panel (Logs)
+  - Source/destination selection: text input, native browse dialog, or path history dropdown
+  - All one-way sync options: comparison method, workers, excludes, dry run, delete orphans, create destination
+  - Real-time progress bar with running stats (copied/updated/identical/errors)
+  - Color-coded activity log with per-file action tracking (COPY/UPDATE/SKIP/ERROR)
+  - Settings and path history (last 10 source + destination) persisted in `~/.config/syncnorris/gui-settings.json`
+  - Resizable width (log panel adapts), fixed height
+  - Cancel support for running operations
+
+### CLI User Interface
 - ✅ **Advanced progress display**
   - Real-time tabular view of up to 5 concurrent files
   - Dual progress bars: data transferred + files processed
@@ -303,6 +316,7 @@ exclude:                          # Glob patterns to exclude
 ```bash
 syncnorris sync      # Synchronize two folders (primary command)
 syncnorris compare   # Compare folders without syncing (alias for sync --dry-run)
+syncnorris gui       # Launch the graphical user interface
 syncnorris config    # Manage configuration
 syncnorris version   # Show version, commit, build date, Go version, OS/arch
 syncnorris help      # Show help for any command
@@ -596,7 +610,8 @@ syncnorris/
 │   ├── config/               # Configuration management
 │   └── models/               # Data models and types
 ├── internal/                 # Private packages
-│   └── cli/                  # CLI commands and validation
+│   ├── cli/                  # CLI commands and validation
+│   └── gui/                  # Gio-based GUI (app, layout, formatter, runner, settings, theme)
 ├── docs/                     # Optimization documentation
 ├── specs/                    # Feature specifications
 ├── scripts/                  # Build and test scripts
@@ -609,6 +624,7 @@ syncnorris/
 
 - Go 1.24+ (uses sync/atomic and other modern features)
 - Make (optional but recommended)
+- GUI builds require system libraries: `wayland-devel libxkbcommon-devel libX11-devel libXcursor-devel mesa-libGLES-devel mesa-libEGL-devel` (Fedora) or equivalent
 
 ### Building
 
@@ -622,7 +638,7 @@ make build
 # Run tests
 make test
 
-# Cross-compile for all platforms
+# Cross-compile for all platforms (CLI only, no GUI)
 make build-all
 ```
 
@@ -660,7 +676,8 @@ See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for complete list.
 
 - **v0.6.1**: Streaming file discovery for improved pipeline performance ✅
 - **v0.6.0**: Logging infrastructure ✅
-- **v0.7.0+**: Bisync stabilization
+- **v0.7.0**: Cross-platform GUI with Gio
+- **v0.8.0+**: Bisync stabilization
 - **v1.0.0**: Promote bidirectional sync to production-ready
 - **Post-v1.0**: Resume functionality, network backends (SMB/NFS)
 
