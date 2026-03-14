@@ -1,5 +1,13 @@
 # Changelog - syncnorris
 
+## [0.7.6] - 2026-03-14
+
+### Improvements
+- **GUI**: Running `syncnorris` without arguments now launches the GUI directly (no need for `syncnorris gui`)
+- **Windows**: Console window hidden on launch (`-H windowsgui` ldflags) — app behaves as a native desktop application
+- **Linux**: Added `syncnorris.desktop` file for desktop environment integration (launch from app menu, no terminal)
+- CLI-only builds (`-tags nogui`) fall back to showing help when no subcommand is given
+
 ## [0.7.5] - 2026-03-14
 
 ### Bug Fixes

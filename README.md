@@ -1,6 +1,6 @@
 # syncnorris
 
-**Version**: v0.7.5
+**Version**: v0.7.6
 **Status**: Production-ready for one-way sync | **Experimental** for bidirectional sync
 **License**: MIT
 

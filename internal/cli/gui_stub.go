@@ -18,3 +18,8 @@ func NewGUICommand() *cobra.Command {
 		},
 	}
 }
+
+// DefaultRunE shows help when no subcommand is given (GUI not available).
+func DefaultRunE(cmd *cobra.Command, args []string) error {
+	return cmd.Help()
+}
