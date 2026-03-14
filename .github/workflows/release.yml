@@ -3,30 +3,207 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'  # Déclenché par les tags comme v0.1.0, v1.2.3, etc.
+      - 'v*'
 
 permissions:
-  contents: write  # Nécessaire pour créer des releases
+  contents: write
 
 jobs:
-  goreleaser:
+  # Run tests once before building
+  test:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          fetch-depth: 0  # Nécessaire pour le changelog
+          go-version: '1.24'
+      - name: Install Gio system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libx11-dev libxcursor-dev libxfixes-dev \
+            libgles2-mesa-dev libegl1-mesa-dev libvulkan-dev
+      - name: Run tests
+        run: go test ./... -race -count=1
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.21'
+  # Build matrix: native compilation on each platform
+  build:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            suffix: linux-amd64
+            archive: tar.gz
+            cgo: '1'
+          - os: ubuntu-24.04-arm
+            goos: linux
+            goarch: arm64
+            suffix: linux-arm64
+            archive: tar.gz
+            cgo: '1'
+          - os: macos-13
+            goos: darwin
+            goarch: amd64
+            suffix: darwin-amd64
+            archive: tar.gz
+            cgo: '1'
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            suffix: darwin-arm64
+            archive: tar.gz
+            cgo: '1'
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            suffix: windows-amd64
+            archive: zip
+            cgo: '0'
+            ext: .exe
 
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v5
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
         with:
-          distribution: goreleaser
-          version: latest
-          args: release --clean
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      # Linux: install Gio system libraries (Wayland + X11)
+      - name: Install Linux GUI dependencies
+        if: matrix.goos == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libx11-dev libxcursor-dev libxfixes-dev \
+            libgles2-mesa-dev libegl1-mesa-dev libvulkan-dev
+
+      - name: Get version info
+        id: version
+        shell: bash
+        run: |
+          echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: ${{ matrix.cgo }}
+        run: |
+          BINARY="syncnorris${{ matrix.ext }}"
+          go build \
+            -ldflags="-s -w -X main.version=${{ steps.version.outputs.version }} -X main.commit=${{ steps.version.outputs.commit }} -X main.date=${{ steps.version.outputs.date }}" \
+            -o "$BINARY" \
+            cmd/syncnorris/main.go
+
+      # Create archive
+      - name: Package (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          ARCHIVE="syncnorris_${{ steps.version.outputs.version }}_${{ matrix.suffix }}.tar.gz"
+          tar czf "$ARCHIVE" syncnorris LICENSE README.md THIRD_PARTY_LICENSES.md
+          echo "archive=$ARCHIVE" >> "$GITHUB_ENV"
+
+      - name: Package (zip)
+        if: matrix.archive == 'zip'
+        shell: bash
+        run: |
+          ARCHIVE="syncnorris_${{ steps.version.outputs.version }}_${{ matrix.suffix }}.zip"
+          7z a "$ARCHIVE" syncnorris.exe LICENSE README.md THIRD_PARTY_LICENSES.md
+          echo "archive=$ARCHIVE" >> "$GITHUB_ENV"
+
+      - name: Generate checksum
+        shell: bash
+        run: |
+          sha256sum "${{ env.archive }}" > "${{ env.archive }}.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: syncnorris-${{ matrix.suffix }}
+          path: |
+            ${{ env.archive }}
+            ${{ env.archive }}.sha256
+
+  # Create GitHub release with all artifacts
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect release files
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' -o -name '*.sha256' \) -exec cp {} release/ \;
+
+          # Generate combined checksums file
+          cd release
+          cat *.sha256 > checksums.txt
+          rm -f *.sha256
+          ls -la
+
+      - name: Get previous tag
+        id: prev_tag
+        run: |
+          PREV=$(git tag --sort=-v:refname | grep '^v' | sed -n '2p')
+          echo "tag=${PREV:-}" >> "$GITHUB_OUTPUT"
+
+      - name: Create release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          PREV_TAG="${{ steps.prev_tag.outputs.tag }}"
+          COMPARE=""
+          if [ -n "$PREV_TAG" ]; then
+            COMPARE="**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${VERSION}"
+          fi
+
+          gh release create "$VERSION" release/* \
+            --title "syncnorris ${VERSION}" \
+            --notes "$(cat <<EOF
+          ## syncnorris ${VERSION}
+
+          Cross-platform file synchronization utility with GUI support.
+
+          ### Downloads
+
+          | Platform | Architecture | File |
+          |----------|-------------|------|
+          | Linux | x86_64 | \`syncnorris_${VERSION}_linux-amd64.tar.gz\` |
+          | Linux | arm64 | \`syncnorris_${VERSION}_linux-arm64.tar.gz\` |
+          | macOS | x86_64 | \`syncnorris_${VERSION}_darwin-amd64.tar.gz\` |
+          | macOS | Apple Silicon | \`syncnorris_${VERSION}_darwin-arm64.tar.gz\` |
+          | Windows | x86_64 | \`syncnorris_${VERSION}_windows-amd64.zip\` |
+
+          All builds include the graphical user interface (\`syncnorris gui\`).
+
+          **Verify checksums**: \`sha256sum -c checksums.txt\`
+
+          ${COMPARE}
+
+          ---
+          **Installation**: Download the archive for your platform, extract it, and add the binary to your PATH.
+          EOF
+          )"
