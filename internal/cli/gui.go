@@ -18,3 +18,8 @@ func NewGUICommand() *cobra.Command {
 		},
 	}
 }
+
+// DefaultRunE launches the GUI when no subcommand is given.
+func DefaultRunE(cmd *cobra.Command, args []string) error {
+	return gui.Run()
+}

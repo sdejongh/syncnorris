@@ -65,6 +65,7 @@ jobs:
             archive: zip
             cgo: '0'
             ext: .exe
+            ldextra: -H windowsgui
 
     runs-on: ${{ matrix.os }}
 
@@ -104,7 +105,7 @@ jobs:
         run: |
           BINARY="syncnorris${{ matrix.ext }}"
           go build \
-            -ldflags="-s -w -X main.version=${{ steps.version.outputs.version }} -X main.commit=${{ steps.version.outputs.commit }} -X main.date=${{ steps.version.outputs.date }}" \
+            -ldflags="-s -w ${{ matrix.ldextra }} -X main.version=${{ steps.version.outputs.version }} -X main.commit=${{ steps.version.outputs.commit }} -X main.date=${{ steps.version.outputs.date }}" \
             -o "$BINARY" \
             cmd/syncnorris/main.go
 
@@ -114,7 +115,11 @@ jobs:
         shell: bash
         run: |
           ARCHIVE="syncnorris_${{ steps.version.outputs.version }}_${{ matrix.suffix }}.tar.gz"
-          tar czf "$ARCHIVE" syncnorris LICENSE README.md THIRD_PARTY_LICENSES.md
+          FILES="syncnorris LICENSE README.md THIRD_PARTY_LICENSES.md"
+          if [ "${{ matrix.goos }}" = "linux" ]; then
+            FILES="$FILES syncnorris.desktop"
+          fi
+          tar czf "$ARCHIVE" $FILES
           echo "archive=$ARCHIVE" >> "$GITHUB_ENV"
 
       - name: Package (zip)

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=SyncNorris
+Comment=Cross-platform file synchronization utility
+Exec=syncnorris
+Terminal=false
+Type=Application
+Categories=Utility;FileTools;
+Keywords=sync;backup;files;copy;

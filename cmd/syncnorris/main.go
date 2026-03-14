@@ -32,10 +32,13 @@ func run() error {
 		Short: "Cross-platform file synchronization utility",
 		Long: `syncnorris is a cross-platform file synchronization utility built in Go.
 It supports one-way and bidirectional synchronization between local folders,
-network shares, and remote storage with multiple comparison methods.`,
+network shares, and remote storage with multiple comparison methods.
+
+Running without a subcommand launches the graphical user interface.`,
 		Version:       version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		RunE:          cli.DefaultRunE,
 	}
 
 	// Add global flags
