@@ -445,7 +445,9 @@ func (a *appState) layoutActions(gtx C) D {
 			btn.Font.Weight = font.Bold
 			return btn.Layout(gtx)
 		}),
-		layout.Flexed(1, func(gtx C) D { return D{} }),
+		layout.Flexed(1, func(gtx C) D {
+			return D{Size: image.Point{X: gtx.Constraints.Max.X, Y: gtx.Constraints.Min.Y}}
+		}),
 		layout.Rigid(func(gtx C) D {
 			if !a.isRunning {
 				gtx = gtx.Disabled()
