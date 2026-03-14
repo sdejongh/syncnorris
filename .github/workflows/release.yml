@@ -65,7 +65,6 @@ jobs:
             archive: zip
             cgo: '0'
             ext: .exe
-            ldextra: -H windowsgui
 
     runs-on: ${{ matrix.os }}
 
