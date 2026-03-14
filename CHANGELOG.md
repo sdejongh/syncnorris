@@ -1,5 +1,10 @@
 # Changelog - syncnorris
 
+## [0.7.3] - 2026-03-14
+
+### Features
+- **GUI**: Add real-time bandwidth graph in progress section — shows current and average transfer speed as text, with a filled area chart over a 60-second sliding window. Y-axis auto-scales to peak bandwidth. Graph height is compact (50dp) to fit the existing layout (#5)
+
 ## [0.7.2] - 2026-03-14
 
 ### Improvements

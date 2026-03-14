@@ -44,11 +44,12 @@ func (s RunningStats) Total() int {
 
 // ProgressState holds current progress for the UI
 type ProgressState struct {
-	Fraction    float32
-	CurrentFile int
-	TotalFiles  int
-	CurrentPath string
-	Stats       RunningStats
+	Fraction         float32
+	CurrentFile      int
+	TotalFiles       int
+	CurrentPath      string
+	Stats            RunningStats
+	BytesTransferred int64
 }
 
 // UIEvent carries updates from the formatter to the GUI event loop
@@ -74,9 +75,10 @@ type GUIFormatter struct {
 	totalFiles int
 	startTime  time.Time
 
-	mu    sync.Mutex
-	files map[string]*fileState
-	stats RunningStats
+	mu               sync.Mutex
+	files            map[string]*fileState
+	stats            RunningStats
+	bytesTransferred int64
 }
 
 var _ output.Formatter = (*GUIFormatter)(nil)
@@ -132,16 +134,19 @@ func (f *GUIFormatter) Progress(update output.ProgressUpdate) error {
 		switch action {
 		case "COPY":
 			f.stats.Copied++
+			f.bytesTransferred += update.TotalBytes
 		case "UPDATE":
 			f.stats.Updated++
+			f.bytesTransferred += update.TotalBytes
 		case "SKIP":
 			f.stats.Skipped++
 		}
 		stats := f.stats
+		bytes := f.bytesTransferred
 		f.mu.Unlock()
 
 		f.sendLog(action, fmt.Sprintf("%s (%s)", update.FilePath, formatSize(update.TotalBytes)))
-		f.sendProgressWithStats(stats, update.FilePath)
+		f.sendProgressWithStatsAndBytes(stats, bytes, update.FilePath)
 
 	case "file_error":
 		f.mu.Lock()
@@ -237,15 +242,17 @@ func (f *GUIFormatter) sendProgress(completed, total int, path string) {
 	}
 	f.mu.Lock()
 	stats := f.stats
+	bytes := f.bytesTransferred
 	f.mu.Unlock()
 	f.send(UIEvent{
 		Type: eventProgress,
 		Progress: &ProgressState{
-			Fraction:    frac,
-			CurrentFile: completed,
-			TotalFiles:  total,
-			CurrentPath: path,
-			Stats:       stats,
+			Fraction:         frac,
+			CurrentFile:      completed,
+			TotalFiles:       total,
+			CurrentPath:      path,
+			Stats:            stats,
+			BytesTransferred: bytes,
 		},
 	})
 }
@@ -259,8 +266,15 @@ func (f *GUIFormatter) sendCurrentProgress(path string) {
 }
 
 // sendProgressWithStats computes fraction from stats.Total() (completed files).
-// This ensures the progress bar never regresses.
 func (f *GUIFormatter) sendProgressWithStats(stats RunningStats, path string) {
+	f.mu.Lock()
+	bytes := f.bytesTransferred
+	f.mu.Unlock()
+	f.sendProgressWithStatsAndBytes(stats, bytes, path)
+}
+
+// sendProgressWithStatsAndBytes sends a progress event with all data.
+func (f *GUIFormatter) sendProgressWithStatsAndBytes(stats RunningStats, bytes int64, path string) {
 	completed := stats.Total()
 	total := f.totalFiles
 	frac := float32(0)
@@ -273,11 +287,12 @@ func (f *GUIFormatter) sendProgressWithStats(stats RunningStats, path string) {
 	f.send(UIEvent{
 		Type: eventProgress,
 		Progress: &ProgressState{
-			Fraction:    frac,
-			CurrentFile: completed,
-			TotalFiles:  total,
-			CurrentPath: path,
-			Stats:       stats,
+			Fraction:         frac,
+			CurrentFile:      completed,
+			TotalFiles:       total,
+			CurrentPath:      path,
+			Stats:            stats,
+			BytesTransferred: bytes,
 		},
 	})
 }

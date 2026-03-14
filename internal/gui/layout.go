@@ -8,6 +8,7 @@ import (
 	"image/color"
 	"time"
 
+	"gioui.org/f32"
 	"gioui.org/font"
 	"gioui.org/layout"
 	"gioui.org/op"
@@ -523,6 +524,108 @@ func (a *appState) layoutProgress(gtx C) D {
 				}),
 			)
 		}),
+		// Bandwidth graph
+		layout.Rigid(spacer(4)),
+		layout.Rigid(a.layoutBandwidth),
+	)
+}
+
+const graphHeight = unit.Dp(50)
+
+func (a *appState) layoutBandwidth(gtx C) D {
+	current := a.bandwidth.Current()
+	avg := a.bandwidth.Average()
+	samples := a.bandwidth.Samples()
+
+	// Text labels
+	bwText := fmt.Sprintf("Current: %s/s  |  Average: %s/s", formatSize(int64(current)), formatSize(int64(avg)))
+
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		layout.Rigid(func(gtx C) D {
+			lbl := material.Caption(a.theme, bwText)
+			lbl.Color = colorTextMuted
+			return lbl.Layout(gtx)
+		}),
+		layout.Rigid(spacer(2)),
+		layout.Rigid(func(gtx C) D {
+			// Graph area
+			h := gtx.Dp(graphHeight)
+			w := gtx.Constraints.Max.X
+			size := image.Point{X: w, Y: h}
+			gtx.Constraints = layout.Exact(size)
+
+			// Background
+			paint.FillShape(gtx.Ops, colorLogBg, clip.Rect{Max: size}.Op())
+
+			if len(samples) < 2 {
+				// Not enough data — draw empty box
+				return bordered(gtx, func(gtx C) D {
+					paint.FillShape(gtx.Ops, colorLogBg, clip.Rect{Max: size}.Op())
+					return D{Size: size}
+				})
+			}
+
+			// Find max value for Y scale
+			maxVal := float64(0)
+			for _, s := range samples {
+				if s.BytesPerSec > maxVal {
+					maxVal = s.BytesPerSec
+				}
+			}
+			if maxVal == 0 {
+				maxVal = 1 // avoid division by zero
+			}
+
+			// Draw filled area chart
+			n := len(samples)
+			stepX := float32(w) / float32(n-1)
+
+			var path clip.Path
+			path.Begin(gtx.Ops)
+			// Start at bottom-left
+			path.MoveTo(f32Point(0, float32(h)))
+			// Line to first data point
+			y0 := float32(h) - float32(h)*float32(samples[0].BytesPerSec/maxVal)
+			path.LineTo(f32Point(0, y0))
+			// Data points
+			for i := 1; i < n; i++ {
+				x := stepX * float32(i)
+				y := float32(h) - float32(h)*float32(samples[i].BytesPerSec/maxVal)
+				path.LineTo(f32Point(x, y))
+			}
+			// Close to bottom-right then bottom-left
+			path.LineTo(f32Point(float32(w), float32(h)))
+			path.Close()
+
+			// Fill with semi-transparent primary color
+			fillColor := colorPrimary
+			fillColor.A = 0x40
+			paint.FillShape(gtx.Ops, fillColor, clip.Outline{Path: path.End()}.Op())
+
+			// Draw the line on top
+			var linePath clip.Path
+			linePath.Begin(gtx.Ops)
+			ly0 := float32(h) - float32(h)*float32(samples[0].BytesPerSec/maxVal)
+			linePath.MoveTo(f32Point(0, ly0))
+			for i := 1; i < n; i++ {
+				x := stepX * float32(i)
+				y := float32(h) - float32(h)*float32(samples[i].BytesPerSec/maxVal)
+				linePath.LineTo(f32Point(x, y))
+			}
+			lineColor := colorPrimary
+			lineColor.A = 0xa0
+			paint.FillShape(gtx.Ops, lineColor,
+				clip.Stroke{Path: linePath.End(), Width: float32(gtx.Dp(unit.Dp(1.5)))}.Op())
+
+			// Border around the graph
+			paint.FillShape(gtx.Ops, colorBorder,
+				clip.Stroke{
+					Path:  clip.Rect{Max: size}.Path(),
+					Width: float32(gtx.Dp(unit.Dp(1))),
+				}.Op())
+
+			return D{Size: size}
+		}),
 	)
 }
 
@@ -603,4 +706,8 @@ func levelColor(level string) color.NRGBA {
 	default:
 		return colorText
 	}
+}
+
+func f32Point(x, y float32) f32.Point {
+	return f32.Point{X: x, Y: y}
 }

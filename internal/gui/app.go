@@ -78,7 +78,8 @@ type appState struct {
 	logEntries []LogEntry
 
 	// Progress
-	progress ProgressState
+	progress  ProgressState
+	bandwidth *BandwidthTracker
 
 	// Running state
 	isRunning bool
@@ -158,6 +159,8 @@ func (a *appState) init() {
 	a.deleteCheck.Value = s.Delete
 	a.createDestCheck.Value = s.CreateDest
 
+	a.bandwidth = NewBandwidthTracker()
+
 	a.logList.List.Axis = layout.Vertical
 	a.logList.List.ScrollToEnd = true
 
@@ -205,6 +208,7 @@ func (a *appState) consumeEvents() {
 		case eventProgress:
 			if ev.Progress != nil {
 				a.progress = *ev.Progress
+				a.bandwidth.Update(ev.Progress.BytesTransferred)
 			}
 		case eventComplete:
 			a.isRunning = false
@@ -389,6 +393,7 @@ func (a *appState) startOperation(dryRun bool) {
 	a.logEntries = nil
 	a.progress = ProgressState{}
 	a.report = nil
+	a.bandwidth.Reset()
 	a.isRunning = true
 	a.statusLevel = "info"
 	if dryRun {
