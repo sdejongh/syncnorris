@@ -134,13 +134,12 @@ func (f *GUIFormatter) Progress(update output.ProgressUpdate) error {
 		switch action {
 		case "COPY":
 			f.stats.Copied++
-			f.bytesTransferred += update.TotalBytes
 		case "UPDATE":
 			f.stats.Updated++
-			f.bytesTransferred += update.TotalBytes
 		case "SKIP":
 			f.stats.Skipped++
 		}
+		f.bytesTransferred += update.TotalBytes
 		stats := f.stats
 		bytes := f.bytesTransferred
 		f.mu.Unlock()

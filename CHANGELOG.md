@@ -1,5 +1,11 @@
 # Changelog - syncnorris
 
+## [0.7.4] - 2026-03-14
+
+### Bug Fixes
+- **GUI**: Bandwidth graph now tracks all processed bytes (including identical/skipped files), not just transferred bytes from copy/update operations — graph is no longer empty when all files are identical (#7)
+- **GUI**: Progress section (bar, stats, bandwidth graph) is always visible to avoid layout shifts when starting a job (#7)
+
 ## [0.7.3] - 2026-03-14
 
 ### Features
