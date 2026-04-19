@@ -2,6 +2,8 @@ package sync
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"path/filepath"
 	"sort"
@@ -16,7 +18,12 @@ import (
 	"github.com/sdejongh/syncnorris/pkg/output"
 	"github.com/sdejongh/syncnorris/pkg/ratelimit"
 	"github.com/sdejongh/syncnorris/pkg/storage"
+	"github.com/sdejongh/syncnorris/pkg/sync/job"
 )
+
+// errSoftPaused is a sentinel returned by the Walk callback when the soft-pause
+// channel is closed. It signals a clean stop of the scanner (not a failure).
+var errSoftPaused = errors.New("soft pause requested")
 
 // Pipeline orchestrates the producer-consumer sync process
 type Pipeline struct {
@@ -53,12 +60,30 @@ type Pipeline struct {
 
 	// Rate limiter for bandwidth limiting (nil = unlimited)
 	rateLimiter *ratelimit.Limiter
+
+	// Optional job tracking for pause/resume support (nil = disabled)
+	job           *job.Job
+	jobStore      *job.JobStore
+	pauseSoft     <-chan struct{}
+	pauseHard     <-chan struct{}
+	completionLog *job.CompletionLog
+	doneSet       map[string]job.CompletionEntry
 }
 
 // PipelineConfig holds configuration for the pipeline
 type PipelineConfig struct {
 	MaxWorkers int
 	QueueSize  int // Buffer size for the task queue
+	// Job is optional. When set, the pipeline loads the completion log,
+	// skips already-completed files, and appends to the log on success.
+	Job      *job.Job
+	JobStore *job.JobStore
+	// PauseSoft, when closed, causes the scanner to stop queueing new
+	// tasks while in-flight workers finish their current file.
+	PauseSoft <-chan struct{}
+	// PauseHard, when closed, cancels the context and rolls back in-flight
+	// .partial files.
+	PauseHard <-chan struct{}
 }
 
 // DefaultPipelineConfig returns sensible defaults
@@ -81,8 +106,8 @@ func NewPipeline(
 	if config.MaxWorkers < 1 {
 		config.MaxWorkers = 1
 	}
-	if config.QueueSize < 100 {
-		config.QueueSize = 100
+	if config.QueueSize < 1 {
+		config.QueueSize = 1
 	}
 
 	// Create rate limiter if bandwidth limit is set
@@ -105,6 +130,11 @@ func NewPipeline(
 		activeFiles: make(map[string]int),
 		results:     make([]*FileTask, 0),
 		rateLimiter: rateLimiter,
+		job:         config.Job,
+		jobStore:    config.JobStore,
+		pauseSoft:   config.PauseSoft,
+		pauseHard:   config.PauseHard,
+		doneSet:     make(map[string]job.CompletionEntry),
 	}
 }
 
@@ -133,6 +163,46 @@ func (p *Pipeline) Run(ctx context.Context) (*models.SyncReport, error) {
 	// Create a cancellable context for graceful shutdown
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	// Hard pause: closing p.pauseHard cancels the context immediately, which
+	// causes all in-flight I/O (including ctxReader) to abort and .partial
+	// files to be cleaned up. The goroutine also exits on ctx.Done() to avoid
+	// a goroutine leak when the pipeline finishes normally.
+	if p.pauseHard != nil {
+		go func() {
+			select {
+			case <-p.pauseHard:
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
+	}
+
+	// Preload completion log if a job is attached
+	if p.job != nil {
+		loaded, err := job.LoadCompletionLog(p.job.CompletionLog)
+		if err != nil {
+			if p.logger != nil {
+				p.logger.Warn(ctx, "failed to load completion log, starting fresh", logging.Fields{"err": err.Error()})
+			}
+			loaded = make(map[string]job.CompletionEntry)
+		}
+		p.doneSet = loaded
+
+		cl, err := job.NewCompletionLog(p.job.CompletionLog)
+		if err != nil {
+			return nil, fmt.Errorf("open completion log: %w", err)
+		}
+		p.completionLog = cl
+		defer func() { _ = p.completionLog.Close() }()
+
+		// Configure a job-scoped partial suffix on the local backend so that
+		// abandonJob in the GUI can locate and remove residual .partial files
+		// by walking the destination for the right suffix pattern.
+		if ld, ok := p.dest.(*storage.Local); ok {
+			ld.SetPartialSuffix(fmt.Sprintf(".syncnorris-%s.partial", p.job.ID[:8]))
+		}
+	}
 
 	// Phase 1: Scan destination first (we need this for comparisons)
 	if p.logger != nil {
@@ -206,7 +276,7 @@ func (p *Pipeline) Run(ctx context.Context) (*models.SyncReport, error) {
 	// Wait for all workers to finish
 	workersWg.Wait()
 
-	if scanErr != nil {
+	if scanErr != nil && !errors.Is(scanErr, errSoftPaused) {
 		report.Status = models.StatusFailed
 		return report, scanErr
 	}
@@ -308,26 +378,66 @@ func (p *Pipeline) scanSourceAndQueue(ctx context.Context, report *models.SyncRe
 			return nil
 		}
 
-		// Update totals
-		p.totalFiles.Add(1)
-		p.totalBytes.Add(f.Size)
-
-		// Update formatter with new totals
-		if p.formatter != nil {
-			p.formatter.Progress(output.ProgressUpdate{
-				Type:       "scan_progress",
-				TotalFiles: int(p.totalFiles.Load()),
-				TotalBytes: p.totalBytes.Load(),
-			})
+		// Soft pause: if the pause channel is closed, stop producing new tasks.
+		// Already-queued tasks will continue to drain through the workers.
+		if p.pauseSoft != nil {
+			select {
+			case <-p.pauseSoft:
+				return errSoftPaused
+			default:
+			}
 		}
 
-		// Create task and add to queue
+		// Skip files already completed in a previous run of this job
+		if p.job != nil {
+			if entry, done := p.doneSet[f.RelativePath]; done {
+				srcInfo, err := p.source.Stat(ctx, f.RelativePath)
+				if err == nil && srcInfo.Size == entry.Size && srcInfo.ModTime.UnixNano() == entry.MTime.UnixNano() {
+					report.Stats.FilesSkipped.Add(1)
+					if p.logger != nil {
+						p.logger.Debug(ctx, "File skipped (previously completed)", logging.Fields{"path": f.RelativePath})
+					}
+					return nil
+				}
+				// Stale completion: fall through to normal flow
+			}
+		}
+
+		// Create task and add to queue; only update totals once the task is
+		// actually enqueued so counters never over-report on a soft-pause.
 		task := NewFileTask(f.RelativePath, f.Size, f.ModTime)
+
+		enqueueTask := func() {
+			p.totalFiles.Add(1)
+			p.totalBytes.Add(f.Size)
+			if p.formatter != nil {
+				p.formatter.Progress(output.ProgressUpdate{
+					Type:       "scan_progress",
+					TotalFiles: int(p.totalFiles.Load()),
+					TotalBytes: p.totalBytes.Load(),
+				})
+			}
+		}
+
+		if p.pauseSoft != nil {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-p.pauseSoft:
+				// Soft pause fired while the scanner was blocked on the queue.
+				// Stop producing; let already-queued tasks drain through workers.
+				return errSoftPaused
+			case p.taskQueue <- task:
+				enqueueTask()
+				return nil
+			}
+		}
 
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case p.taskQueue <- task:
+			enqueueTask()
 			return nil
 		}
 	})
@@ -630,6 +740,7 @@ func (p *Pipeline) copyFile(ctx context.Context, workerID int, task *FileTask, r
 	report.Stats.BytesTransferred.Add(task.Size)
 	p.processedBytes.Add(task.Size)
 	p.addResult(task)
+	p.recordCompletion(task, sourceInfo.ModTime)
 
 	if p.logger != nil {
 		p.logger.Debug(ctx, "File copied successfully", logging.Fields{
@@ -797,6 +908,7 @@ func (p *Pipeline) updateFile(ctx context.Context, workerID int, task *FileTask,
 	report.Stats.BytesTransferred.Add(task.Size)
 	p.processedBytes.Add(task.Size)
 	p.addResult(task)
+	p.recordCompletion(task, sourceInfo.ModTime)
 
 	if p.logger != nil {
 		p.logger.Debug(ctx, "File updated successfully", logging.Fields{
@@ -813,6 +925,26 @@ func (p *Pipeline) updateFile(ctx context.Context, workerID int, task *FileTask,
 			BytesWritten: task.Size,
 			TotalBytes:   task.Size,
 			CurrentFile:  fileIndex,
+		})
+	}
+}
+
+// recordCompletion appends an entry to the completion log after a successful
+// copy or update. It is a no-op when no Job is attached (p.completionLog == nil).
+func (p *Pipeline) recordCompletion(task *FileTask, sourceModTime time.Time) {
+	if p.completionLog == nil {
+		return
+	}
+	entry := job.CompletionEntry{
+		Path:  task.RelativePath,
+		Size:  task.Size,
+		MTime: sourceModTime,
+		Hash:  task.SourceHash, // empty when no hash computed; log uses "-" placeholder
+	}
+	if err := p.completionLog.Append(entry); err != nil && p.logger != nil {
+		p.logger.Warn(context.Background(), "failed to append completion log", logging.Fields{
+			"path": task.RelativePath,
+			"err":  err.Error(),
 		})
 	}
 }

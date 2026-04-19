@@ -62,6 +62,10 @@ type FileTask struct {
 
 	// WorkerID identifies which worker processed this task
 	WorkerID int
+
+	// SourceHash holds the hash of the source file if the comparator computed
+	// one during comparison. Empty when no hash was computed.
+	SourceHash string
 }
 
 // NewFileTask creates a new file task from scan data

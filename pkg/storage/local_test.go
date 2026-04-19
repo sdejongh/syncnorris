@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -557,6 +558,91 @@ func TestLocalMkdirAll(t *testing.T) {
 			t.Fatalf("MkdirAll() error for existing dir = %v", err)
 		}
 	})
+}
+
+// TestLocalWriteAtomic verifies Write produces the correct content and no leftover .partial files
+func TestLocalWriteAtomic(t *testing.T) {
+	dir := t.TempDir()
+	local, err := NewLocal(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	data := []byte("hello world")
+	rc := io.NopCloser(bytes.NewReader(data))
+	if err := local.Write(context.Background(), "sub/file.txt", rc, int64(len(data)), nil); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	got, err := os.ReadFile(filepath.Join(dir, "sub/file.txt"))
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if string(got) != string(data) {
+		t.Errorf("content mismatch: got %q", got)
+	}
+
+	// No leftover .partial
+	entries, _ := os.ReadDir(filepath.Join(dir, "sub"))
+	for _, e := range entries {
+		if strings.Contains(e.Name(), ".partial") {
+			t.Errorf("partial file left behind: %s", e.Name())
+		}
+	}
+}
+
+// TestLocalWriteContextCancellationCleansUpPartial verifies that a mid-write cancel
+// removes the .partial file and leaves no final file at the destination.
+func TestLocalWriteContextCancellationCleansUpPartial(t *testing.T) {
+	dir := t.TempDir()
+	local, err := NewLocal(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Reader that blocks until context cancel
+	ctx, cancel := context.WithCancel(context.Background())
+	blockingReader := &slowReader{delay: 50 * time.Millisecond, total: 1024}
+
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		cancel()
+	}()
+
+	err = local.Write(ctx, "big.bin", io.NopCloser(blockingReader), 1024, nil)
+	if err == nil {
+		t.Fatal("expected error on context cancel")
+	}
+
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if strings.Contains(e.Name(), ".partial") {
+			t.Errorf("partial file not cleaned up: %s", e.Name())
+		}
+		if e.Name() == "big.bin" {
+			t.Errorf("final file should not exist after cancel")
+		}
+	}
+}
+
+// slowReader emits bytes slowly so we can cancel mid-read.
+type slowReader struct {
+	delay time.Duration
+	total int
+	read  int
+}
+
+func (r *slowReader) Read(p []byte) (int, error) {
+	if r.read >= r.total {
+		return 0, io.EOF
+	}
+	time.Sleep(r.delay)
+	n := len(p)
+	if r.read+n > r.total {
+		n = r.total - r.read
+	}
+	r.read += n
+	return n, nil
 }
 
 // TestBackendInterface verifies Local implements Backend interface

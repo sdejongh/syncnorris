@@ -9,9 +9,13 @@ import (
 	"path/filepath"
 )
 
+// defaultPartialSuffix is appended to file names while they are being written.
+const defaultPartialSuffix = ".syncnorris.partial"
+
 // Local is a filesystem-based storage backend
 type Local struct {
-	rootPath string
+	rootPath      string
+	partialSuffix string
 }
 
 // NewLocal creates a new local filesystem backend
@@ -100,7 +104,14 @@ func (l *Local) Read(ctx context.Context, path string) (io.ReadCloser, error) {
 	return file, nil
 }
 
-// Write creates or overwrites a file
+// SetPartialSuffix overrides the default partial file suffix for this backend.
+// Callers using jobs set this to ".syncnorris-<jobid8>.partial" so partial files
+// from different jobs can be distinguished. Empty string restores the default.
+func (l *Local) SetPartialSuffix(s string) { l.partialSuffix = s }
+
+// Write creates or overwrites a file atomically via a .partial temp file followed
+// by a rename. If the context is cancelled mid-write, the partial file is removed
+// and the destination path is left untouched.
 func (l *Local) Write(ctx context.Context, path string, reader io.Reader, size int64, metadata *FileInfo) error {
 	fullPath := filepath.Join(l.rootPath, path)
 
@@ -110,22 +121,42 @@ func (l *Local) Write(ctx context.Context, path string, reader io.Reader, size i
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
-	file, err := os.Create(fullPath)
-	if err != nil {
-		return fmt.Errorf("failed to create file: %w", err)
+	partialSuffix := l.partialSuffix
+	if partialSuffix == "" {
+		partialSuffix = defaultPartialSuffix
 	}
-	defer file.Close()
+	partialPath := fullPath + partialSuffix
 
-	written, err := io.Copy(file, reader)
+	file, err := os.Create(partialPath)
 	if err != nil {
-		return fmt.Errorf("failed to write file: %w", err)
+		return fmt.Errorf("failed to create partial file: %w", err)
 	}
 
+	// Wrap reader with context-aware reader so io.Copy stops on cancel
+	cancelReader := &ctxReader{ctx: ctx, r: reader}
+
+	written, copyErr := io.Copy(file, cancelReader)
+	closeErr := file.Close()
+
+	if copyErr != nil || closeErr != nil {
+		_ = os.Remove(partialPath)
+		if copyErr != nil {
+			return fmt.Errorf("failed to write file: %w", copyErr)
+		}
+		return fmt.Errorf("failed to close partial file: %w", closeErr)
+	}
 	if written != size {
+		_ = os.Remove(partialPath)
 		return fmt.Errorf("incomplete write: expected %d bytes, wrote %d", size, written)
 	}
 
-	// Preserve metadata if provided
+	// Atomic rename into final path
+	if err := os.Rename(partialPath, fullPath); err != nil {
+		_ = os.Remove(partialPath)
+		return fmt.Errorf("failed to finalize file: %w", err)
+	}
+
+	// Preserve metadata if provided (applied after rename on the final path)
 	if metadata != nil {
 		// Preserve modification time
 		if !metadata.ModTime.IsZero() {
@@ -143,6 +174,21 @@ func (l *Local) Write(ctx context.Context, path string, reader io.Reader, size i
 	}
 
 	return nil
+}
+
+// ctxReader wraps an io.Reader and checks context cancellation before each Read.
+type ctxReader struct {
+	ctx context.Context
+	r   io.Reader
+}
+
+func (c *ctxReader) Read(p []byte) (int, error) {
+	select {
+	case <-c.ctx.Done():
+		return 0, c.ctx.Err()
+	default:
+	}
+	return c.r.Read(p)
 }
 
 // Delete removes a file or directory

@@ -1,5 +1,21 @@
 # Changelog - syncnorris
 
+## [v0.8.0] — 2026-04-19
+
+### Added
+- GUI: Pause/Resume for one-way sync jobs with soft and hard pause modes
+- GUI: Automatic detection of jobs interrupted by crash or app close (banner at launch)
+- Single-instance lock prevents concurrent GUI runs (`~/.config/syncnorris/app.lock` via `github.com/gofrs/flock`)
+- Atomic file writes via `.partial` + rename (improves safety for all runs, not just paused ones)
+- New `pkg/sync/job` package: `Job` type with JSON persistence, append-only `CompletionLog` (TSV), `JobStore`, and heartbeat ticker for crash detection
+- Job metadata and completion logs persisted under `~/.config/syncnorris/jobs/`
+
+### Changed
+- `storage.Local.Write` now writes to a `.syncnorris.partial` suffix and renames to the final path on success
+- `pkg/sync.PipelineConfig` accepts optional `Job`, `JobStore`, `PauseSoft`, `PauseHard` fields; all are nil-safe and do not affect existing behavior when unset
+
+---
+
 ## [0.7.7] - 2026-03-14
 
 ### Bug Fixes
