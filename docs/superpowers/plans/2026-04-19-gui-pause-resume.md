@@ -1225,7 +1225,7 @@ func TestPipelineAcceptsJobConfig(t *testing.T) {
 
 	op := &models.SyncOperation{
 		ID: "test", SourcePath: src, DestPath: dst,
-		Mode: models.SyncOneWay, ComparisonMethod: models.CompareNameSize,
+		Mode: models.ModeOneWay, ComparisonMethod: models.CompareNameSize,
 		MaxWorkers: 2, BufferSize: 4096,
 	}
 	cmp := compare.NewCompositeComparator(false, 4096)
@@ -1374,7 +1374,7 @@ func TestPipelineSkipsAlreadyCompletedFiles(t *testing.T) {
 
 	op := &models.SyncOperation{
 		ID: "test", SourcePath: src, DestPath: dst,
-		Mode: models.SyncOneWay, ComparisonMethod: models.CompareNameSize,
+		Mode: models.ModeOneWay, ComparisonMethod: models.CompareNameSize,
 		MaxWorkers: 2, BufferSize: 4096,
 	}
 	cmp := compare.NewCompositeComparator(false, 4096)
@@ -1420,7 +1420,7 @@ func TestPipelineRecopiesWhenSourceChangedSinceComplete(t *testing.T) {
 
 	op := &models.SyncOperation{
 		ID: "test", SourcePath: src, DestPath: dst,
-		Mode: models.SyncOneWay, ComparisonMethod: models.CompareNameSize,
+		Mode: models.ModeOneWay, ComparisonMethod: models.CompareNameSize,
 		MaxWorkers: 1, BufferSize: 4096,
 	}
 	cfg := DefaultPipelineConfig()
@@ -1520,7 +1520,7 @@ func TestPipelineWritesCompletionLog(t *testing.T) {
 
 	op := &models.SyncOperation{
 		ID: "test", SourcePath: src, DestPath: dst,
-		Mode: models.SyncOneWay, ComparisonMethod: models.CompareNameSize,
+		Mode: models.ModeOneWay, ComparisonMethod: models.CompareNameSize,
 		MaxWorkers: 1, BufferSize: 4096,
 	}
 	cfg := DefaultPipelineConfig()
@@ -1636,7 +1636,7 @@ func TestPipelineSoftPauseStopsNewTasksButFinishesInFlight(t *testing.T) {
 
 	op := &models.SyncOperation{
 		ID: "t", SourcePath: src, DestPath: dst,
-		Mode: models.SyncOneWay, ComparisonMethod: models.CompareNameSize,
+		Mode: models.ModeOneWay, ComparisonMethod: models.CompareNameSize,
 		MaxWorkers: 2, BufferSize: 4096,
 	}
 	cfg := DefaultPipelineConfig()
@@ -1677,7 +1677,7 @@ func TestPipelineHardPauseCancelsImmediately(t *testing.T) {
 
 	op := &models.SyncOperation{
 		ID: "t", SourcePath: src, DestPath: dst,
-		Mode: models.SyncOneWay, ComparisonMethod: models.CompareNameSize,
+		Mode: models.ModeOneWay, ComparisonMethod: models.CompareNameSize,
 		MaxWorkers: 2, BufferSize: 4096,
 	}
 	cfg := DefaultPipelineConfig()
