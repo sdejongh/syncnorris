@@ -1,714 +1,218 @@
 # syncnorris
 
-**Version**: v0.8.0
-**Status**: Production-ready for one-way sync | **Experimental** for bidirectional sync
-**License**: MIT
+Cross-platform file synchronization utility written in Go, with a concurrent pipeline, multiple comparison strategies, and an optional native GUI.
 
-Cross-platform file synchronization utility built in Go, optimized for performance with advanced hash comparison and parallel operations.
+- **Status**: production-ready for one-way sync; bidirectional sync is experimental
+- **Platforms**: Linux, macOS, Windows (amd64, arm64)
+- **License**: MIT
 
-## Current Features ✅
+## Features
 
-### Core Functionality
-- ✅ **One-way synchronization** from source to destination (production-ready)
-  - Local filesystem support (mounted network shares work)
-  - Parallel file transfers (configurable worker count)
-  - Dry-run mode to preview changes without modifying files
-  - Incremental sync (only changed files are transferred)
-  - **Delete orphan files** (`--delete`): Remove files from destination that don't exist in source
+### Synchronization
 
-- ⚠️ **Bidirectional synchronization** (EXPERIMENTAL - v0.4.0)
-  - Two-way sync between source and destination
-  - **Conflict detection**: modify-modify, delete-modify, create-create
-  - **Conflict resolution strategies**:
-    - `newer`: Use most recently modified version (default)
-    - `source-wins`: Always prefer source version
-    - `dest-wins`: Always prefer destination version
-    - `both`: Keep both versions with `.source-conflict`/`.dest-conflict` suffix
-  - **Optional state tracking** (`--stateful`): Track changes between syncs
-  - ⚠️ **Use with caution**: Always test with `--dry-run` first!
+- One-way sync with parallel workers, dry-run mode, and optional orphan deletion (`--delete`)
+- Bidirectional sync (experimental) with conflict detection and resolution strategies: `newer`, `source-wins`, `dest-wins`, `both`
+- Optional state tracking (`--stateful`) for incremental bidirectional runs
+- Streaming file discovery — workers start as soon as the first file is found
+- Atomic writes via `.syncnorris.partial` rename pattern (no half-written files in the destination)
+- Glob-based exclusion (`--exclude "*.log"`, repeatable)
+- Bandwidth limiting (`--bandwidth 10M`)
 
-### Comparison Methods
-- ✅ **Hash-based comparison** (SHA-256, default and recommended)
-  - Intelligent composite strategy: metadata first, hash only when needed
-  - Partial hashing for large files (≥1MB): 95% I/O reduction for quick rejection
-  - Parallel hash computation: 1.8-1.9x speedup
-  - Buffer pooling for reduced memory pressure
-- ✅ **MD5 hash comparison** (faster alternative to SHA-256)
-  - Similar performance to SHA-256 but less secure
-  - Suitable for non-critical data where speed matters
-  - Also supports partial hashing and parallel computation
-- ✅ **Binary comparison** (byte-by-byte verification)
-  - Most thorough comparison method
-  - Reports exact byte offset where files differ
-  - Useful for debugging or when hash collisions are a concern
-- ✅ **Name/size comparison** (fast metadata-only mode)
-  - Ideal for re-sync scenarios: 10-40x faster than hash mode
-  - Sub-second re-sync for 1000 identical files
-- ✅ **Timestamp comparison** (name+size+modification time)
-  - Faster than hash-based comparison
-  - Suitable when you trust timestamps haven't been manipulated
+### Comparison methods
 
-### Graphical User Interface (GUI)
-- ✅ **Cross-platform GUI** (`syncnorris gui`)
-  - Built with Gio — native rendering on Wayland, X11, Windows, macOS
-  - Single binary, no runtime dependencies
-  - Two-column layout: config panel (left) + tabbed right panel (Logs)
-  - Source/destination selection: text input, native browse dialog, or path history dropdown
-  - All one-way sync options: comparison method, workers, excludes, dry run, delete orphans, create destination
-  - Real-time progress bar with running stats (copied/updated/identical/errors)
-  - Live bandwidth graph (60-second sliding window) with current speed, average speed, and dashed average line
-  - Color-coded activity log with per-file action tracking (COPY/UPDATE/SKIP/ERROR)
-  - Settings and path history (last 10 source + destination) persisted in `~/.config/syncnorris/gui-settings.json`
-  - Resizable width (log panel adapts), fixed height
-  - Cancel support for running operations
-  - **Pause / Resume** for one-way sync jobs (see below)
+| Method | Use case |
+|--------|----------|
+| `hash` (SHA-256, default) | Strong verification; partial hashing for files ≥1MB; parallel source/dest hashing |
+| `md5` | Same optimizations as `hash`, slightly faster, weaker guarantee |
+| `binary` | Byte-by-byte; reports exact differing offset |
+| `namesize` | Metadata only; 10–40× faster for unchanged files |
+| `timestamp` | Name + size + mtime; trusts timestamps |
 
-#### Pause / Resume (v0.8.0)
+### Graphical interface (`syncnorris gui`)
 
-One-way sync jobs can be paused mid-run and resumed later, even after a crash or accidental app close.
+- Built with [Gio](https://gioui.org) — native rendering on Wayland, X11, Windows, and macOS
+- Config panel (source/dest, comparison, workers, excludes, dry-run, delete, create-dest) + tabbed activity panel
+- Live progress bar, bandwidth chart (60 s sliding window), color-coded per-file log
+- Native directory picker, persistent settings and path history (`~/.config/syncnorris/gui-settings.json`)
+- Single-instance file lock (`~/.config/syncnorris/app.lock`)
+- **Pause / Resume** for one-way jobs, with automatic crash recovery:
+  - *Soft pause* — finishes in-flight files, then waits
+  - *Hard pause* — cancels immediately; partial files are cleaned up automatically
+  - On restart, interrupted jobs can be resumed from where they stopped
 
-- **Soft pause** — finishes all files currently in flight, then waits. No data loss; the destination is always in a consistent state.
-- **Hard pause** — cancels in-flight workers immediately. Files that were being written are left as `.syncnorris.partial` temporary files and are ignored on the next scan; the sync picks up cleanly from the last confirmed completion.
-- **Automatic crash recovery** — when the app starts, it checks for jobs that were running at last exit. If an interrupted job is found, a banner offers to resume or discard it. No manual intervention required.
-- **Completion log** — as each file is synced successfully, its path, size, and modification time are appended to a per-job log (`~/.config/syncnorris/jobs/<id>.log`). On resume, files whose on-disk stat matches the log entry are skipped instantly without re-comparison. Files that changed on disk since the pause are re-evaluated normally.
-- **One-way sync only** — bidirectional sync does not yet support pause/resume.
-- **Single instance** — only one GUI instance can run at a time; a second launch is blocked by a file lock (`~/.config/syncnorris/app.lock`) and shows an error message.
+### Output & logging
 
-### CLI User Interface
-- ✅ **Advanced progress display**
-  - Real-time tabular view of up to 5 concurrent files
-  - Dual progress bars: data transferred + files processed
-  - **Platform-specific status icons**:
-    - Linux/macOS: 🟢 copying, 🔵 comparing, ✅ complete, ❌ error
-    - Windows: `[>>]` copying, `[??]` comparing, `[OK]` complete, `[!!]` error
-  - Legend displayed at top of progress view
-  - Instantaneous transfer rate (3-second sliding window) + average
-  - Accurate ETA calculation
-  - Terminal width detection (prevents line wrapping)
-  - Optimized for Windows terminals (ASCII icons, reduced flicker)
-- ✅ **Human-readable output** with comprehensive summary statistics
-- ✅ **Differences report**
-  - `compare` command: always displays differences to screen
-  - `sync` command: optional with `--diff-report FILE`
-  - **Report always created** even when no differences (v0.2.0)
-  - **Tracks all operations**: copied, updated, synchronized, deleted, errors
-  - Includes reason for each difference (only in source, content differs, deleted, copy error, etc.)
-  - Supports human-readable and JSON formats
-  - Shows "No differences found" when fully synchronized
-  - JSON output suitable for automation/scripting
-- ✅ **Quiet mode** for scripts (suppress non-error output)
-- ✅ **Verbose mode** for debugging
-- ✅ **JSON output** for automation and scripting (`--output json`)
-
-### File Filtering
-- ✅ **Exclude patterns** (glob-based filtering)
-  - Supports glob patterns: `*.log`, `node_modules/**`, `.git/**`
-  - Multiple patterns via `--exclude` flag (can be repeated)
-  - Excluded files are counted in "skipped" statistics and appear in differences report
-
-### Performance Controls
-- ✅ **Bandwidth limiting** (`--bandwidth`, `-b`)
-  - Limit transfer speed: `--bandwidth 10M` (10 MiB/s)
-  - Supports K, M, G units (e.g., `500K`, `1G`)
-  - Applied to both file copying and hash comparison
-
-### Architecture (v0.2.0, enhanced v0.6.1)
-- ✅ **Producer-Consumer Pipeline**
-  - Scanner (producer) populates task queue while workers process in parallel
-  - **Streaming file discovery** (v0.6.1): workers start processing the first file as soon as it's found on disk, no waiting for the full directory listing
-  - Each worker handles complete file lifecycle (verify → compare → copy)
-  - Dynamic progress updates during scan phase
-  - Better memory efficiency (no full operation list or intermediate slice in memory)
-
-### Performance Optimizations
-syncnorris has been heavily optimized and exceeds all performance targets:
-
-- **Atomic counter statistics**: Lock-free updates, 8.6x faster (6% throughput gain)
-- **Progress callback throttling**: 93% overhead reduction (smooth 20 updates/sec)
-- **Partial hashing**: 95% I/O reduction for files differing in first 256KB
-- **Parallel hash computation**: Source and destination hashed concurrently
-- **Composite comparison**: Metadata check before expensive hash operations
-- **Buffer pooling**: Reduced GC pressure with sync.Pool
-- **Graceful interrupt handling**: Cursor visibility restored on Ctrl+C (v0.2.0)
-
-**Measured Results**:
-- 10,000 files synchronized in <2 minutes (target: <5 min) ✅
-- 1,000 identical files re-synced in <0.5 seconds ✅
-- Memory usage <300MB for 1M files (target: <500MB) ✅
-- Incremental sync 10-40x faster than full copy ✅
-
-### Build & Distribution
-- ✅ **Single static binary** (no dependencies required)
-- ✅ **Cross-platform**: Linux, Windows, macOS (amd64, arm64)
-- ✅ **Configuration file** support (YAML format)
-- ✅ **Shell autocompletion** (bash, zsh, fish, powershell)
-
-### Logging (v0.6.0)
-- ✅ **File logging** with configurable output
-  - JSON and plain text formats (`--log-format text|json`)
-  - Log levels: debug, info, warn, error (`--log-level`)
-  - Automatic log rotation (size-based with configurable backups)
-  - Directory auto-creation for log paths
-  - **Detailed debug logging**: trace every file operation (copied, updated, synchronized, skipped, deleted, errors)
-
-## Planned Features 🚧
-
-These features are **NOT yet implemented** but are planned for future releases:
-
-- 🚧 **Native network storage** (SMB/Samba, NFS without mounting - post-v1.0)
-
-See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for detailed feature status.
+- Human-readable progress (tabular view of concurrent files, ETA, transfer rate) or JSON (`--output json`)
+- Differences report (`--diff-report FILE`, human or JSON) listing copied, updated, skipped, deleted files and errors
+- File logging (`--log-file`, `--log-format text|json`, `--log-level debug|info|warn|error`) with size-based rotation
 
 ## Installation
 
-### Quick Install (Recommended)
+### Quick install
 
-**Linux & macOS:**
+Linux and macOS:
+
 ```bash
 curl -sSL https://raw.githubusercontent.com/sdejongh/syncnorris/master/install.sh | bash
 ```
 
-Or with wget:
-```bash
-wget -qO- https://raw.githubusercontent.com/sdejongh/syncnorris/master/install.sh | bash
-```
+Windows (PowerShell):
 
-**Windows (PowerShell):**
 ```powershell
 irm https://raw.githubusercontent.com/sdejongh/syncnorris/master/install.ps1 | iex
 ```
 
-Or download and run:
-```powershell
-# Download the script
-Invoke-WebRequest -Uri https://raw.githubusercontent.com/sdejongh/syncnorris/master/install.ps1 -OutFile install.ps1
-
-# Run it
-powershell -ExecutionPolicy Bypass -File install.ps1
-```
-
-The installer will automatically:
-- Detect your OS and architecture
-- Download the latest release
-- Install the binary to the appropriate location
-- Add it to your PATH
-
-### Manual Download
-
-Download the latest release for your platform from the [Releases page](https://github.com/sdejongh/syncnorris/releases):
-
-1. Download the archive for your platform:
-   - **Linux**: `syncnorris_vVERSION_linux-amd64.tar.gz` or `syncnorris_vVERSION_linux-arm64.tar.gz`
-   - **macOS**: `syncnorris_vVERSION_darwin-amd64.tar.gz` or `syncnorris_vVERSION_darwin-arm64.tar.gz`
-   - **Windows**: `syncnorris_vVERSION_windows-amd64.zip`
-
-2. Extract the archive
-3. Move the binary to a directory in your PATH:
-   - **Linux/macOS**: `sudo mv syncnorris /usr/local/bin/`
-   - **Windows**: Move `syncnorris.exe` to `C:\Program Files\syncnorris\` and add to PATH
-
-### Using Go
-
-If you have Go installed:
+### Go
 
 ```bash
 go install github.com/sdejongh/syncnorris/cmd/syncnorris@latest
 ```
 
-### From Source
+### From source
 
 ```bash
-# Clone the repository
 git clone https://github.com/sdejongh/syncnorris.git
 cd syncnorris
-
-# Build
-make build
-
-# The binary will be in dist/syncnorris
+make build   # → dist/syncnorris
 ```
 
-## Quick Start
+Pre-built archives are also available on the [Releases page](https://github.com/sdejongh/syncnorris/releases).
 
-### Basic One-Way Sync
-
-```bash
-# Sync from source to destination (with progress)
-syncnorris sync --source /data/projects --dest /backup/projects
-
-# Short form
-syncnorris sync -s /src -d /dst
-```
-
-### Preview Changes (Dry-Run)
+## Quick start
 
 ```bash
-# See what would be changed without modifying anything
+# Basic one-way sync
+syncnorris sync -s /data/projects -d /backup/projects
+
+# Preview changes only
 syncnorris sync -s /src -d /dst --dry-run
-```
 
-### Bidirectional Sync (EXPERIMENTAL)
-
-```bash
-# ⚠️ ALWAYS test with --dry-run first!
-syncnorris sync -s /src -d /dst --mode bidirectional --dry-run
-
-# Two-way sync with default conflict resolution (newer wins)
-syncnorris sync -s /src -d /dst --mode bidirectional
-
-# Use source-wins conflict resolution
-syncnorris sync -s /src -d /dst --mode bidirectional --conflict source-wins
-
-# Keep both versions on conflict
-syncnorris sync -s /src -d /dst --mode bidirectional --conflict both
-
-# Enable state tracking between syncs
-syncnorris sync -s /src -d /dst --mode bidirectional --stateful
-```
-
-### Fast Metadata-Only Comparison
-
-```bash
-# Use name+size comparison instead of hash (much faster for re-sync)
+# Fast re-sync (metadata comparison)
 syncnorris sync -s /src -d /dst --comparison namesize
 
-# Use timestamp comparison (name+size+modification time)
-syncnorris sync -s /src -d /dst --comparison timestamp
+# Mirror source (delete orphans in destination)
+syncnorris sync -s /src -d /dst --delete
+
+# Launch the GUI
+syncnorris gui
 ```
 
-### Parallel Operations
-
-```bash
-# Use 16 parallel workers (default: 5)
-syncnorris sync -s /src -d /dst --parallel 16
-```
-
-### Quiet Mode for Scripts
-
-```bash
-# Suppress progress output, only show errors
-syncnorris sync -s /src -d /dst --quiet
-
-# Or use short form
-syncnorris sync -s /src -d /dst -q
-```
-
-## Configuration
-
-Create a config file at `~/.config/syncnorris/config.yaml`:
-
-```yaml
-sync:
-  mode: oneway                    # Only 'oneway' currently supported
-  comparison: hash                # 'hash', 'md5', 'binary', 'namesize', or 'timestamp'
-
-performance:
-  max_workers: 8                  # Parallel worker count (0 = CPU count)
-  buffer_size: 65536              # Buffer size for I/O operations (64KB)
-  bandwidth_limit: "0"            # Bandwidth limit (e.g., "10M", "1G", 0 = unlimited)
-
-output:
-  format: human                   # 'human' or 'json'
-  progress: true                  # Show real-time progress bars
-  quiet: false                    # Suppress non-error output
-  verbose: false                  # Extra debug information
-
-exclude:                          # Glob patterns to exclude
-  - "*.log"
-  - ".git/**"
-  - "node_modules/**"
-
-# Note: logging is defined in config but not yet implemented
-```
-
-## Usage Reference
+## Usage
 
 ### Commands
 
-```bash
-syncnorris sync      # Synchronize two folders (primary command)
-syncnorris compare   # Compare folders without syncing (alias for sync --dry-run)
-syncnorris gui       # Launch the graphical user interface
-syncnorris config    # Manage configuration
-syncnorris version   # Show version, commit, build date, Go version, OS/arch
-syncnorris help      # Show help for any command
+| Command | Purpose |
+|---------|---------|
+| `syncnorris sync` | Synchronize two directories |
+| `syncnorris compare` | Compare directories without writing (alias for `sync --dry-run` with on-screen diff) |
+| `syncnorris gui` | Launch the graphical interface |
+| `syncnorris config` | Manage configuration |
+| `syncnorris version` | Show version, commit, build date |
+
+### Common flags
+
+| Flag | Description |
+|------|-------------|
+| `-s, --source PATH` | Source directory (required) |
+| `-d, --dest PATH` | Destination directory (required) |
+| `--comparison METHOD` | `hash` (default), `md5`, `binary`, `namesize`, `timestamp` |
+| `--dry-run` | Compare only, do not write |
+| `--create-dest` | Create destination if missing |
+| `--delete` | Delete orphan files in destination |
+| `-p, --parallel N` | Worker count (default: 5) |
+| `--exclude PATTERN` | Glob pattern to exclude (repeatable) |
+| `-b, --bandwidth SIZE` | Bandwidth limit (e.g. `500K`, `10M`, `1G`) |
+| `--mode MODE` | `oneway` (default) or `bidirectional` |
+| `--conflict STRATEGY` | `newer`, `source-wins`, `dest-wins`, `both` (bidirectional only) |
+| `--stateful` | Persist state between bidirectional runs |
+| `--output FORMAT` | `human` (default) or `json` |
+| `--diff-report FILE` | Write differences report to file |
+| `--diff-format FORMAT` | `human` (default) or `json` |
+| `--log-file PATH` | Enable file logging |
+| `--log-format FORMAT` | `text` (default) or `json` |
+| `--log-level LEVEL` | `debug`, `info` (default), `warn`, `error` |
+| `-q, --quiet` | Suppress non-error output |
+| `-v, --verbose` | Extra debug output |
+
+Run `syncnorris <command> --help` for the full list.
+
+## Configuration
+
+Optional config file at `~/.config/syncnorris/config.yaml`:
+
+```yaml
+sync:
+  mode: oneway
+  comparison: hash
+
+performance:
+  max_workers: 8
+  buffer_size: 65536
+  bandwidth_limit: "0"      # "10M", "1G", or "0" for unlimited
+
+output:
+  format: human
+  progress: true
+  quiet: false
+  verbose: false
+
+exclude:
+  - "*.log"
+  - ".git/**"
+  - "node_modules/**"
 ```
 
-### Sync Command Options
+CLI flags override the config file.
 
-#### Required Flags
-```
---source, -s PATH    Source directory path (required)
---dest, -d PATH      Destination directory path (required)
-```
+## Bidirectional sync (experimental)
 
-#### Functional Flags (Implemented)
-```
---comparison METHOD  Comparison method: hash, md5, binary, namesize, timestamp (default: hash)
---dry-run            Compare only, don't sync
---create-dest        Create destination directory if it doesn't exist (sync only)
---delete             Delete files in destination that don't exist in source
---parallel, -p N     Number of parallel workers (default: 5)
---mode oneway        Sync mode (only 'oneway' currently supported)
---diff-report FILE   Write differences report to file (sync command)
-                     Note: compare command always displays to screen by default
---diff-format FORMAT Report format: human, json (default: human)
---output FORMAT      Output format: human, json (default: human)
---exclude PATTERN    Glob patterns to exclude (can be repeated)
---bandwidth, -b      Bandwidth limit (e.g., "10M", "1G")
-
-# BIDIRECTIONAL FLAGS (experimental)
---mode bidirectional Two-way sync between source and destination
---conflict STRATEGY  Conflict resolution: newer, source-wins, dest-wins, both (default: newer)
---stateful           Enable state persistence between syncs (tracks changes)
-
-# LOGGING FLAGS
---log-file PATH      Write logs to file (enables logging)
---log-format FORMAT  Log format: text, json (default: text)
---log-level LEVEL    Log level: debug, info, warn, error (default: info)
-```
-
-#### Global Flags
-```
---config FILE        Config file path (default: ~/.config/syncnorris/config.yaml)
---quiet, -q          Suppress non-error output
---verbose, -v        Verbose debug output
-```
-
-### Version Command
-
-```bash
-# Show detailed version information
-syncnorris version
-# Output:
-# syncnorris v0.2.0
-#   Commit:     abc1234
-#   Built:      2025-11-28T09:03:07Z
-#   Go version: go1.24.10
-#   OS/Arch:    linux/amd64
-
-# Show only version number
-syncnorris version -s
-# Output: v0.2.0
-
-# Quick version check (Cobra built-in)
-syncnorris --version
-# Output: syncnorris version v0.2.0
-```
-
-
-## Examples
-
-### Backup Important Data
+Bidirectional sync is functional but not yet production-ready. **Always test with `--dry-run` first.**
 
 ```bash
-# Daily backup with hash verification and differences report
-syncnorris sync \
-  --source ~/Documents \
-  --dest /mnt/backup/Documents \
-  --comparison hash \
-  --diff-report /var/log/backup-diff.txt
-
-# Check if there were any differences
-cat /var/log/backup-diff.txt
+syncnorris sync -s /a -d /b --mode bidirectional --dry-run
+syncnorris sync -s /a -d /b --mode bidirectional --conflict newer
+syncnorris sync -s /a -d /b --mode bidirectional --conflict both --stateful
 ```
 
-### Fast Re-Sync After Interruption
-
-```bash
-# Use name+size for quick re-sync (skip re-hashing identical files)
-syncnorris sync \
-  -s /large/dataset \
-  -d /backup/dataset \
-  --comparison namesize
-```
-
-### Sync to New Destination
-
-```bash
-# Create destination directory if it doesn't exist
-syncnorris sync \
-  -s /data/project \
-  -d /backup/2025/project \
-  --create-dest
-```
-
-### Test Before Syncing
-
-```bash
-# Dry-run to preview changes
-syncnorris sync -s ~/src -d /mnt/nas/backup --dry-run
-
-# Or use the dedicated compare command
-syncnorris compare -s ~/src -d /mnt/nas/backup
-
-# Review the output, then run actual sync
-syncnorris sync -s ~/src -d /mnt/nas/backup
-```
-
-### Mirror Source (Delete Orphans)
-
-```bash
-# Delete files in destination that don't exist in source
-syncnorris sync -s /source -d /backup --delete
-
-# Preview what would be deleted (dry-run)
-syncnorris sync -s /source -d /backup --delete --dry-run
-
-# Or use compare command to see what would be deleted
-syncnorris compare -s /source -d /backup --delete
-```
-
-### Compare Folders
-
-```bash
-# Compare always displays differences report to screen
-syncnorris compare -s /original -d /backup --comparison hash
-syncnorris compare -s /original -d /backup --comparison md5
-syncnorris compare -s /original -d /backup --comparison binary
-syncnorris compare -s /original -d /backup --comparison namesize
-syncnorris compare -s /original -d /backup --comparison timestamp
-
-# Display differences in JSON format
-syncnorris compare -s /original -d /backup --diff-format json
-
-# Save differences to a file instead of screen
-syncnorris compare -s /original -d /backup --diff-report differences.txt
-
-# The report includes:
-# - Files with copy/update errors
-# - Files only in source (not yet copied)
-# - Files only in destination (only with --delete flag)
-# - Files that would be deleted (with --delete flag)
-# - Files with hash/content differences
-# - Files skipped by exclude patterns
-# - Detailed metadata (size, modification time, hash)
-```
-
-### Exclude Files
-
-```bash
-# Exclude log files
-syncnorris sync -s /src -d /dst --exclude "*.log"
-
-# Exclude multiple patterns
-syncnorris sync -s /src -d /dst --exclude "*.log" --exclude ".git/**" --exclude "node_modules/**"
-
-# Excluded files appear in report with "skipped" reason
-```
-
-### Bandwidth Limiting
-
-```bash
-# Limit transfer speed to 10 MiB/s
-syncnorris sync -s /src -d /dst --bandwidth 10M
-
-# Limit to 500 KiB/s (useful for slow networks)
-syncnorris sync -s /src -d /dst -b 500K
-
-# Limit to 1 GiB/s
-syncnorris sync -s /src -d /dst -b 1G
-
-# Bandwidth is applied to both file copying and hash comparison
-```
-
-### JSON Output
-
-```bash
-# Get JSON output for automation
-syncnorris sync -s /src -d /dst --output json
-
-# Combine with diff-report for structured logging
-syncnorris sync -s /src -d /dst --output json --diff-report sync.json --diff-format json
-```
-
-### Generate Differences Report for Sync
-
-```bash
-# Sync normally doesn't show differences report
-syncnorris sync -s /src -d /dst
-
-# Save differences report to a file after sync
-syncnorris sync -s /src -d /dst --diff-report sync_differences.txt
-
-# Generate JSON report for automation
-syncnorris sync -s /src -d /dst \
-  --diff-report sync_report.json \
-  --diff-format json
-```
-
-### Maximum Performance
-
-```bash
-# Use more parallel workers for I/O-bound operations
-syncnorris sync \
-  -s /source \
-  -d /dest \
-  --parallel 16 \
-  --comparison namesize
-```
-
-### Fast Hash Verification
-
-```bash
-# Use MD5 for faster hash-based comparison (less secure than SHA-256)
-syncnorris sync \
-  -s /media/photos \
-  -d /backup/photos \
-  --comparison md5
-```
-
-### Debugging File Differences
-
-```bash
-# Use binary comparison to find exact byte offset where files differ
-syncnorris sync \
-  -s /original \
-  -d /modified \
-  --comparison binary \
-  --dry-run
-```
-
-### Logging
-
-```bash
-# Enable file logging
-syncnorris sync -s /src -d /dst --log-file /var/log/syncnorris.log
-
-# Use JSON format for structured logging
-syncnorris sync -s /src -d /dst --log-file sync.log --log-format json
-
-# Enable debug-level logging for troubleshooting (traces every file operation)
-syncnorris sync -s /src -d /dst --log-file debug.log --log-level debug
-
-# Combine logging with other options
-syncnorris sync -s /src -d /dst \
-  --log-file /var/log/syncnorris.log \
-  --log-format json \
-  --log-level info
-```
-
-**Debug log output example (text format):**
-```
-2025-11-29T10:30:45Z [DEBUG] Processing file path=document.txt size=1024 worker=0 dest_exists=true
-2025-11-29T10:30:45Z [DEBUG] File synchronized (identical) path=document.txt size=1024 duration=1.2ms
-2025-11-29T10:30:45Z [DEBUG] Copying file (new) path=newfile.txt size=2048 dry_run=false
-2025-11-29T10:30:45Z [DEBUG] File copied successfully path=newfile.txt size=2048 duration=5.3ms
-2025-11-29T10:30:45Z [DEBUG] Updating file (content differs) path=modified.txt size=512 dry_run=false
-2025-11-29T10:30:45Z [DEBUG] File updated successfully path=modified.txt size=512 duration=3.1ms
-```
-
-## Performance Tips
-
-1. **First sync**: Use `--comparison hash` (default) for cryptographic verification
-2. **Re-sync**: Use `--comparison namesize` for 10-40x speedup on unchanged files
-3. **Fast hash**: Use `--comparison md5` for slightly faster hashing (less secure than SHA-256)
-4. **Debugging**: Use `--comparison binary` for byte-by-byte verification with exact offset reporting
-5. **Large files**: Hash comparison (SHA-256/MD5) automatically uses partial hashing (≥1MB)
-6. **Network storage**: Mount shares locally rather than waiting for native SMB/NFS support
-7. **Worker count**: Default is 5; increase for fast I/O or decrease for slow disks
-8. **Progress overhead**: Already optimized (93% reduction), no tuning needed
-
-## Project Structure
-
-```
-syncnorris/
-├── cmd/syncnorris/           # Main CLI entry point
-├── pkg/                      # Public packages
-│   ├── storage/              # Storage backends (local filesystem)
-│   ├── compare/              # Comparison algorithms (hash, composite)
-│   ├── sync/                 # Sync engine and worker pools
-│   ├── output/               # Output formatters (human, progress)
-│   ├── config/               # Configuration management
-│   └── models/               # Data models and types
-├── internal/                 # Private packages
-│   ├── cli/                  # CLI commands and validation
-│   └── gui/                  # Gio-based GUI (app, layout, formatter, runner, settings, theme)
-├── docs/                     # Optimization documentation
-├── specs/                    # Feature specifications
-├── scripts/                  # Build and test scripts
-└── tests/                    # Test files
-```
+With `--conflict both`, conflicting files are kept under `.source-conflict` / `.dest-conflict` suffixes.
 
 ## Development
 
 ### Prerequisites
 
-- Go 1.24+ (uses sync/atomic and other modern features)
-- Make (optional but recommended)
-- GUI builds require system libraries: `wayland-devel libxkbcommon-devel libX11-devel libXcursor-devel mesa-libGLES-devel mesa-libEGL-devel` (Fedora) or equivalent
+- Go 1.24+
+- GNU Make (optional)
+- GUI builds require system libraries on Linux:
+  ```
+  libwayland-dev libwayland-egl1 libxkbcommon-dev libxkbcommon-x11-dev
+  libx11-dev libx11-xcb-dev libxcursor-dev libxfixes-dev
+  libgles2-mesa-dev libegl1-mesa-dev libvulkan-dev
+  ```
+  (On Fedora: `wayland-devel libxkbcommon-devel libX11-devel libXcursor-devel mesa-libGLES-devel mesa-libEGL-devel`.)
 
-### Building
-
-```bash
-# Install dependencies
-go mod download
-
-# Build for current platform
-make build
-
-# Run tests
-make test
-
-# Cross-compile for all platforms (CLI only, no GUI)
-make build-all
-```
-
-### Running Tests
+### Build & test
 
 ```bash
-# Unit tests
-go test ./...
-
-# With coverage
-go test -cover ./...
-
-# Performance benchmarks
-go test -bench=. ./pkg/compare/
+make build              # current platform → dist/syncnorris
+make build-all          # cross-compile (CLI only, no GUI)
+make test               # full suite with race detection and coverage
+make test-unit          # pkg/ only
+make test-integration   # tests/ only
+make lint               # go vet + golangci-lint
 ```
+
+Headless builds (no GUI) use `-tags nogui` with `CGO_ENABLED=0`.
 
 ## Documentation
 
-- [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) - Detailed feature status
-- [CHANGELOG.md](CHANGELOG.md) - Version history and optimization details
-- [docs/ATOMIC_COUNTERS_OPTIMIZATION.md](docs/ATOMIC_COUNTERS_OPTIMIZATION.md) - Lock-free statistics
-- [docs/PARALLEL_HASH_OPTIMIZATION.md](docs/PARALLEL_HASH_OPTIMIZATION.md) - Concurrent hashing
-- [docs/PARTIAL_HASH_OPTIMIZATION.md](docs/PARTIAL_HASH_OPTIMIZATION.md) - Quick rejection strategy
-- [docs/THROTTLE_OPTIMIZATION.md](docs/THROTTLE_OPTIMIZATION.md) - Callback optimization
-
-## Known Limitations
-
-1. **Bidirectional sync** is EXPERIMENTAL - functional but not production-ready
-2. **Network storage** requires mounting (no native SMB/NFS support planned for post-v1.0)
-3. **Pause/Resume** is supported for one-way sync only; bidirectional sync cannot be paused yet
-
-See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for complete list.
-
-## Roadmap
-
-- **v0.6.1**: Streaming file discovery for improved pipeline performance ✅
-- **v0.6.0**: Logging infrastructure ✅
-- **v0.7.0**: Cross-platform GUI with Gio ✅
-- **v0.8.0**: GUI Pause/Resume for one-way sync with crash recovery ✅
-- **v1.0.0**: Promote bidirectional sync to production-ready
-- **Post-v1.0**: Pause/Resume for bidirectional sync, network backends (SMB/NFS)
+- [CHANGELOG.md](CHANGELOG.md) — version history
+- [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) — detailed feature status
+- [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) — dependency licenses
 
 ## Contributing
 
-Contributions are welcome! Priority areas:
-
-1. Testing and feedback on bidirectional sync
-2. Documentation improvements
-3. Bug reports and feature requests
+Contributions are welcome. Priority areas: testing and feedback on bidirectional sync, documentation improvements, bug reports.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-### Third-Party Licenses
-
-This project uses several open-source libraries. See [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for detailed license information about dependencies.
-
-## Credits
-
-Built with performance in mind, leveraging Go's excellent concurrency primitives and modern optimization techniques.
+MIT — see [LICENSE](LICENSE).
