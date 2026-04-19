@@ -2,6 +2,7 @@ package sync
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"path/filepath"
 	"sort"
@@ -157,6 +158,25 @@ func (p *Pipeline) Run(ctx context.Context) (*models.SyncReport, error) {
 	// Create a cancellable context for graceful shutdown
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	// Preload completion log if a job is attached
+	if p.job != nil {
+		loaded, err := job.LoadCompletionLog(p.job.CompletionLog)
+		if err != nil {
+			if p.logger != nil {
+				p.logger.Warn(ctx, "failed to load completion log, starting fresh", logging.Fields{"err": err.Error()})
+			}
+			loaded = make(map[string]job.CompletionEntry)
+		}
+		p.doneSet = loaded
+
+		cl, err := job.NewCompletionLog(p.job.CompletionLog)
+		if err != nil {
+			return nil, fmt.Errorf("open completion log: %w", err)
+		}
+		p.completionLog = cl
+		defer func() { _ = p.completionLog.Close() }()
+	}
 
 	// Phase 1: Scan destination first (we need this for comparisons)
 	if p.logger != nil {
@@ -330,6 +350,21 @@ func (p *Pipeline) scanSourceAndQueue(ctx context.Context, report *models.SyncRe
 			})
 			p.resultsMu.Unlock()
 			return nil
+		}
+
+		// Skip files already completed in a previous run of this job
+		if p.job != nil {
+			if entry, done := p.doneSet[f.RelativePath]; done {
+				srcInfo, err := p.source.Stat(ctx, f.RelativePath)
+				if err == nil && srcInfo.Size == entry.Size && srcInfo.ModTime.UnixNano() == entry.MTime.UnixNano() {
+					report.Stats.FilesSkipped.Add(1)
+					if p.logger != nil {
+						p.logger.Debug(ctx, "File skipped (previously completed)", logging.Fields{"path": f.RelativePath})
+					}
+					return nil
+				}
+				// Stale completion: fall through to normal flow
+			}
 		}
 
 		// Update totals
