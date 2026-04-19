@@ -689,6 +689,7 @@ func (p *Pipeline) copyFile(ctx context.Context, workerID int, task *FileTask, r
 	report.Stats.BytesTransferred.Add(task.Size)
 	p.processedBytes.Add(task.Size)
 	p.addResult(task)
+	p.recordCompletion(task, sourceInfo.ModTime)
 
 	if p.logger != nil {
 		p.logger.Debug(ctx, "File copied successfully", logging.Fields{
@@ -856,6 +857,7 @@ func (p *Pipeline) updateFile(ctx context.Context, workerID int, task *FileTask,
 	report.Stats.BytesTransferred.Add(task.Size)
 	p.processedBytes.Add(task.Size)
 	p.addResult(task)
+	p.recordCompletion(task, sourceInfo.ModTime)
 
 	if p.logger != nil {
 		p.logger.Debug(ctx, "File updated successfully", logging.Fields{
@@ -872,6 +874,26 @@ func (p *Pipeline) updateFile(ctx context.Context, workerID int, task *FileTask,
 			BytesWritten: task.Size,
 			TotalBytes:   task.Size,
 			CurrentFile:  fileIndex,
+		})
+	}
+}
+
+// recordCompletion appends an entry to the completion log after a successful
+// copy or update. It is a no-op when no Job is attached (p.completionLog == nil).
+func (p *Pipeline) recordCompletion(task *FileTask, sourceModTime time.Time) {
+	if p.completionLog == nil {
+		return
+	}
+	entry := job.CompletionEntry{
+		Path:  task.RelativePath,
+		Size:  task.Size,
+		MTime: sourceModTime,
+		Hash:  task.SourceHash, // empty when no hash computed; log uses "-" placeholder
+	}
+	if err := p.completionLog.Append(entry); err != nil && p.logger != nil {
+		p.logger.Warn(context.Background(), "failed to append completion log", logging.Fields{
+			"path": task.RelativePath,
+			"err":  err.Error(),
 		})
 	}
 }

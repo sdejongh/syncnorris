@@ -113,6 +113,43 @@ func TestPipelineSkipsAlreadyCompletedFiles(t *testing.T) {
 	}
 }
 
+func TestPipelineWritesCompletionLog(t *testing.T) {
+	src, dst := setupSourceAndDest(t, map[string]string{"a.txt": "x", "b.txt": "y"})
+	source, _ := storage.NewLocal(src)
+	dest, _ := storage.NewLocal(dst)
+	defer source.Close()
+	defer dest.Close()
+
+	storeDir := t.TempDir()
+	js := job.NewJobStore(storeDir)
+	j, _ := js.Create(src, dst, job.Options{Mode: "oneway", Comparator: "namesize"})
+
+	op := &models.SyncOperation{
+		ID: "test", SourcePath: src, DestPath: dst,
+		Mode: models.ModeOneWay, ComparisonMethod: models.CompareNameSize,
+		MaxWorkers: 1, BufferSize: 4096,
+	}
+	cfg := DefaultPipelineConfig()
+	cfg.Job = j
+	cfg.JobStore = js
+	p := NewPipeline(source, dest, compare.NewCompositeComparator(false, 4096), nil, logging.NewNullLogger(), op, cfg)
+
+	if _, err := p.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := job.LoadCompletionLog(j.CompletionLog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 2 {
+		t.Errorf("expected 2 completion entries, got %d", len(loaded))
+	}
+	if _, ok := loaded["a.txt"]; !ok {
+		t.Error("a.txt missing from completion log")
+	}
+}
+
 func TestPipelineRecopiesWhenSourceChangedSinceComplete(t *testing.T) {
 	src, dst := setupSourceAndDest(t, map[string]string{"a.txt": "old"})
 	source, _ := storage.NewLocal(src)
