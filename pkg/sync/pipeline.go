@@ -2,6 +2,7 @@ package sync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -19,6 +20,10 @@ import (
 	"github.com/sdejongh/syncnorris/pkg/storage"
 	"github.com/sdejongh/syncnorris/pkg/sync/job"
 )
+
+// errSoftPaused is a sentinel returned by the Walk callback when the soft-pause
+// channel is closed. It signals a clean stop of the scanner (not a failure).
+var errSoftPaused = errors.New("soft pause requested")
 
 // Pipeline orchestrates the producer-consumer sync process
 type Pipeline struct {
@@ -101,8 +106,8 @@ func NewPipeline(
 	if config.MaxWorkers < 1 {
 		config.MaxWorkers = 1
 	}
-	if config.QueueSize < 100 {
-		config.QueueSize = 100
+	if config.QueueSize < 1 {
+		config.QueueSize = 1
 	}
 
 	// Create rate limiter if bandwidth limit is set
@@ -158,6 +163,20 @@ func (p *Pipeline) Run(ctx context.Context) (*models.SyncReport, error) {
 	// Create a cancellable context for graceful shutdown
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	// Hard pause: closing p.pauseHard cancels the context immediately, which
+	// causes all in-flight I/O (including ctxReader) to abort and .partial
+	// files to be cleaned up. The goroutine also exits on ctx.Done() to avoid
+	// a goroutine leak when the pipeline finishes normally.
+	if p.pauseHard != nil {
+		go func() {
+			select {
+			case <-p.pauseHard:
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
+	}
 
 	// Preload completion log if a job is attached
 	if p.job != nil {
@@ -250,7 +269,7 @@ func (p *Pipeline) Run(ctx context.Context) (*models.SyncReport, error) {
 	// Wait for all workers to finish
 	workersWg.Wait()
 
-	if scanErr != nil {
+	if scanErr != nil && !errors.Is(scanErr, errSoftPaused) {
 		report.Status = models.StatusFailed
 		return report, scanErr
 	}
@@ -352,6 +371,16 @@ func (p *Pipeline) scanSourceAndQueue(ctx context.Context, report *models.SyncRe
 			return nil
 		}
 
+		// Soft pause: if the pause channel is closed, stop producing new tasks.
+		// Already-queued tasks will continue to drain through the workers.
+		if p.pauseSoft != nil {
+			select {
+			case <-p.pauseSoft:
+				return errSoftPaused
+			default:
+			}
+		}
+
 		// Skip files already completed in a previous run of this job
 		if p.job != nil {
 			if entry, done := p.doneSet[f.RelativePath]; done {
@@ -382,6 +411,19 @@ func (p *Pipeline) scanSourceAndQueue(ctx context.Context, report *models.SyncRe
 
 		// Create task and add to queue
 		task := NewFileTask(f.RelativePath, f.Size, f.ModTime)
+
+		if p.pauseSoft != nil {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-p.pauseSoft:
+				// Soft pause fired while the scanner was blocked on the queue.
+				// Stop producing; let already-queued tasks drain through workers.
+				return errSoftPaused
+			case p.taskQueue <- task:
+				return nil
+			}
+		}
 
 		select {
 		case <-ctx.Done():
