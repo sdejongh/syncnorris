@@ -14,6 +14,7 @@ import (
 	"github.com/sdejongh/syncnorris/pkg/models"
 	"github.com/sdejongh/syncnorris/pkg/storage"
 	"github.com/sdejongh/syncnorris/pkg/sync"
+	"github.com/sdejongh/syncnorris/pkg/sync/job"
 )
 
 // RunOptions holds the configuration gathered from the GUI widgets
@@ -30,6 +31,13 @@ type RunOptions struct {
 	Delete     bool
 	CreateDest bool
 	Stateful   bool
+
+	// Optional job tracking for pause/resume support (nil = disabled).
+	// These are set by the state machine in app.go before calling runSync.
+	Job       *job.Job
+	JobStore  *job.JobStore
+	PauseSoft chan struct{}
+	PauseHard chan struct{}
 }
 
 // buildOperation creates a SyncOperation from RunOptions
@@ -101,8 +109,14 @@ func runSync(ctx context.Context, opts RunOptions, events chan<- UIEvent) {
 	// Create formatter that sends to GUI
 	formatter := NewGUIFormatter(events)
 
-	// Create engine and run
+	// Create engine, apply pipeline config, and run
 	engine := sync.NewEngine(source, dest, comparator, formatter, logging.NewNullLogger(), op)
+	cfg := sync.DefaultPipelineConfig()
+	cfg.Job = opts.Job
+	cfg.JobStore = opts.JobStore
+	cfg.PauseSoft = opts.PauseSoft
+	cfg.PauseHard = opts.PauseHard
+	engine.SetPipelineConfig(cfg)
 	report, err := engine.Run(ctx)
 	if err != nil {
 		events <- UIEvent{Type: eventError, Error: err}

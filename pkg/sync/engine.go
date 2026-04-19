@@ -13,12 +13,13 @@ import (
 
 // Engine orchestrates the sync operation
 type Engine struct {
-	source     storage.Backend
-	dest       storage.Backend
-	comparator compare.Comparator
-	formatter  output.Formatter
-	logger     logging.Logger
-	operation  *models.SyncOperation
+	source         storage.Backend
+	dest           storage.Backend
+	comparator     compare.Comparator
+	formatter      output.Formatter
+	logger         logging.Logger
+	operation      *models.SyncOperation
+	pipelineConfig PipelineConfig
 }
 
 // NewEngine creates a new sync engine
@@ -30,13 +31,20 @@ func NewEngine(
 	operation *models.SyncOperation,
 ) *Engine {
 	return &Engine{
-		source:     source,
-		dest:       dest,
-		comparator: comparator,
-		formatter:  formatter,
-		logger:     logger,
-		operation:  operation,
+		source:         source,
+		dest:           dest,
+		comparator:     comparator,
+		formatter:      formatter,
+		logger:         logger,
+		operation:      operation,
+		pipelineConfig: DefaultPipelineConfig(),
 	}
+}
+
+// SetPipelineConfig overrides the default pipeline config. Must be called
+// before Run.
+func (e *Engine) SetPipelineConfig(cfg PipelineConfig) {
+	e.pipelineConfig = cfg
 }
 
 // Run executes the sync operation using the pipeline architecture
@@ -56,9 +64,9 @@ func (e *Engine) Run(ctx context.Context) (*models.SyncReport, error) {
 
 // runPipeline executes sync using the producer-consumer pipeline
 func (e *Engine) runPipeline(ctx context.Context) (*models.SyncReport, error) {
-	config := PipelineConfig{
-		MaxWorkers: e.operation.MaxWorkers,
-		QueueSize:  1000,
+	cfg := e.pipelineConfig
+	if cfg.MaxWorkers == 0 {
+		cfg = DefaultPipelineConfig()
 	}
 
 	pipeline := NewPipeline(
@@ -68,7 +76,7 @@ func (e *Engine) runPipeline(ctx context.Context) (*models.SyncReport, error) {
 		e.formatter,
 		e.logger,
 		e.operation,
-		config,
+		cfg,
 	)
 
 	return pipeline.Run(ctx)
@@ -76,9 +84,9 @@ func (e *Engine) runPipeline(ctx context.Context) (*models.SyncReport, error) {
 
 // runBidirectional executes sync using the bidirectional pipeline
 func (e *Engine) runBidirectional(ctx context.Context) (*models.SyncReport, error) {
-	config := PipelineConfig{
-		MaxWorkers: e.operation.MaxWorkers,
-		QueueSize:  1000,
+	cfg := e.pipelineConfig
+	if cfg.MaxWorkers == 0 {
+		cfg = DefaultPipelineConfig()
 	}
 
 	pipeline := NewBidirectionalPipeline(
@@ -88,7 +96,7 @@ func (e *Engine) runBidirectional(ctx context.Context) (*models.SyncReport, erro
 		e.formatter,
 		e.logger,
 		e.operation,
-		config,
+		cfg,
 	)
 
 	return pipeline.Run(ctx)
