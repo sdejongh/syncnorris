@@ -16,6 +16,7 @@ import (
 	"github.com/sdejongh/syncnorris/pkg/output"
 	"github.com/sdejongh/syncnorris/pkg/ratelimit"
 	"github.com/sdejongh/syncnorris/pkg/storage"
+	"github.com/sdejongh/syncnorris/pkg/sync/job"
 )
 
 // Pipeline orchestrates the producer-consumer sync process
@@ -53,12 +54,30 @@ type Pipeline struct {
 
 	// Rate limiter for bandwidth limiting (nil = unlimited)
 	rateLimiter *ratelimit.Limiter
+
+	// Optional job tracking for pause/resume support (nil = disabled)
+	job           *job.Job
+	jobStore      *job.JobStore
+	pauseSoft     <-chan struct{}
+	pauseHard     <-chan struct{}
+	completionLog *job.CompletionLog
+	doneSet       map[string]job.CompletionEntry
 }
 
 // PipelineConfig holds configuration for the pipeline
 type PipelineConfig struct {
 	MaxWorkers int
 	QueueSize  int // Buffer size for the task queue
+	// Job is optional. When set, the pipeline loads the completion log,
+	// skips already-completed files, and appends to the log on success.
+	Job      *job.Job
+	JobStore *job.JobStore
+	// PauseSoft, when closed, causes the scanner to stop queueing new
+	// tasks while in-flight workers finish their current file.
+	PauseSoft <-chan struct{}
+	// PauseHard, when closed, cancels the context and rolls back in-flight
+	// .partial files.
+	PauseHard <-chan struct{}
 }
 
 // DefaultPipelineConfig returns sensible defaults
@@ -105,6 +124,11 @@ func NewPipeline(
 		activeFiles: make(map[string]int),
 		results:     make([]*FileTask, 0),
 		rateLimiter: rateLimiter,
+		job:         config.Job,
+		jobStore:    config.JobStore,
+		pauseSoft:   config.PauseSoft,
+		pauseHard:   config.PauseHard,
+		doneSet:     make(map[string]job.CompletionEntry),
 	}
 }
 
