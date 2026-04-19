@@ -1,6 +1,6 @@
 # syncnorris
 
-**Version**: v0.7.7
+**Version**: v0.8.0
 **Status**: Production-ready for one-way sync | **Experimental** for bidirectional sync
 **License**: MIT
 
@@ -61,6 +61,18 @@ Cross-platform file synchronization utility built in Go, optimized for performan
   - Settings and path history (last 10 source + destination) persisted in `~/.config/syncnorris/gui-settings.json`
   - Resizable width (log panel adapts), fixed height
   - Cancel support for running operations
+  - **Pause / Resume** for one-way sync jobs (see below)
+
+#### Pause / Resume (v0.8.0)
+
+One-way sync jobs can be paused mid-run and resumed later, even after a crash or accidental app close.
+
+- **Soft pause** — finishes all files currently in flight, then waits. No data loss; the destination is always in a consistent state.
+- **Hard pause** — cancels in-flight workers immediately. Files that were being written are left as `.syncnorris.partial` temporary files and are ignored on the next scan; the sync picks up cleanly from the last confirmed completion.
+- **Automatic crash recovery** — when the app starts, it checks for jobs that were running at last exit. If an interrupted job is found, a banner offers to resume or discard it. No manual intervention required.
+- **Completion log** — as each file is synced successfully, its path, size, and modification time are appended to a per-job log (`~/.config/syncnorris/jobs/<id>.log`). On resume, files whose on-disk stat matches the log entry are skipped instantly without re-comparison. Files that changed on disk since the pause are re-evaluated normally.
+- **One-way sync only** — bidirectional sync does not yet support pause/resume.
+- **Single instance** — only one GUI instance can run at a time; a second launch is blocked by a file lock (`~/.config/syncnorris/app.lock`) and shows an error message.
 
 ### CLI User Interface
 - ✅ **Advanced progress display**
@@ -143,7 +155,6 @@ syncnorris has been heavily optimized and exceeds all performance targets:
 
 These features are **NOT yet implemented** but are planned for future releases:
 
-- 🚧 **Resume interrupted operations** (post-v1.0)
 - 🚧 **Native network storage** (SMB/Samba, NFS without mounting - post-v1.0)
 
 See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for detailed feature status.
@@ -669,7 +680,7 @@ go test -bench=. ./pkg/compare/
 
 1. **Bidirectional sync** is EXPERIMENTAL - functional but not production-ready
 2. **Network storage** requires mounting (no native SMB/NFS support planned for post-v1.0)
-3. **Interrupted operations** cannot be resumed (checkpointing planned for post-v1.0)
+3. **Pause/Resume** is supported for one-way sync only; bidirectional sync cannot be paused yet
 
 See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for complete list.
 
@@ -677,10 +688,10 @@ See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for complete list.
 
 - **v0.6.1**: Streaming file discovery for improved pipeline performance ✅
 - **v0.6.0**: Logging infrastructure ✅
-- **v0.7.0**: Cross-platform GUI with Gio
-- **v0.8.0+**: Bisync stabilization
+- **v0.7.0**: Cross-platform GUI with Gio ✅
+- **v0.8.0**: GUI Pause/Resume for one-way sync with crash recovery ✅
 - **v1.0.0**: Promote bidirectional sync to production-ready
-- **Post-v1.0**: Resume functionality, network backends (SMB/NFS)
+- **Post-v1.0**: Pause/Resume for bidirectional sync, network backends (SMB/NFS)
 
 ## Contributing
 
