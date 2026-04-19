@@ -20,6 +20,7 @@ const (
 	eventProgress
 	eventComplete
 	eventError
+	eventJobFinished
 )
 
 // LogEntry represents a single log line in the GUI

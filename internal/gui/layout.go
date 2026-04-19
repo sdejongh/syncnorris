@@ -244,7 +244,7 @@ func (a *appState) layoutPathRow(gtx C, label string, editor *widget.Editor, bro
 		layout.Rigid(func(gtx C) D {
 			return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
 				layout.Flexed(1, func(gtx C) D {
-					if a.isRunning {
+					if a.runState == stateRunning {
 						gtx = gtx.Disabled()
 					}
 					return bordered(gtx, func(gtx C) D {
@@ -255,7 +255,7 @@ func (a *appState) layoutPathRow(gtx C, label string, editor *widget.Editor, bro
 				}),
 				layout.Rigid(spacer(4)),
 				layout.Rigid(func(gtx C) D {
-					if a.isRunning || len(history) == 0 {
+					if a.runState == stateRunning || len(history) == 0 {
 						gtx = gtx.Disabled()
 					}
 					btn := material.Button(a.theme, historyBtn, "▼")
@@ -269,7 +269,7 @@ func (a *appState) layoutPathRow(gtx C, label string, editor *widget.Editor, bro
 				}),
 				layout.Rigid(spacer(4)),
 				layout.Rigid(func(gtx C) D {
-					if a.isRunning {
+					if a.runState == stateRunning {
 						gtx = gtx.Disabled()
 					}
 					btn := material.Button(a.theme, browseBtn, "Browse")
@@ -351,7 +351,7 @@ func (a *appState) layoutOptions(gtx C) D {
 			}),
 			layout.Rigid(spacer(6)),
 			layout.Rigid(func(gtx C) D {
-				if a.isRunning {
+				if a.runState == stateRunning {
 					gtx = gtx.Disabled()
 				}
 				return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
@@ -383,7 +383,7 @@ func (a *appState) radioRow(gtx C, label string, enum *widget.Enum, options []ra
 	for _, opt := range options {
 		opt := opt
 		children = append(children, layout.Rigid(func(gtx C) D {
-			if a.isRunning {
+			if a.runState == stateRunning {
 				gtx = gtx.Disabled()
 			}
 			return material.RadioButton(a.theme, enum, opt.Key, opt.Label).Layout(gtx)
@@ -405,7 +405,7 @@ func (a *appState) labeledInput(gtx C, label string, editor *widget.Editor, hint
 			if maxWidth > 0 {
 				gtx.Constraints.Max.X = gtx.Dp(unit.Dp(maxWidth))
 			}
-			if a.isRunning {
+			if a.runState == stateRunning {
 				gtx = gtx.Disabled()
 			}
 			return bordered(gtx, func(gtx C) D {
@@ -422,7 +422,7 @@ func (a *appState) labeledInput(gtx C, label string, editor *widget.Editor, hint
 func (a *appState) layoutActions(gtx C) D {
 	return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
 		layout.Rigid(func(gtx C) D {
-			if a.isRunning {
+			if a.runState == stateRunning {
 				gtx = gtx.Disabled()
 			}
 			btn := material.Button(a.theme, &a.syncBtn, "Sync")
@@ -437,7 +437,7 @@ func (a *appState) layoutActions(gtx C) D {
 		}),
 		layout.Rigid(spacer(10)),
 		layout.Rigid(func(gtx C) D {
-			if a.isRunning {
+			if a.runState == stateRunning {
 				gtx = gtx.Disabled()
 			}
 			btn := material.Button(a.theme, &a.compareBtn, "Compare")
@@ -454,7 +454,7 @@ func (a *appState) layoutActions(gtx C) D {
 			return D{Size: image.Point{X: gtx.Constraints.Max.X, Y: gtx.Constraints.Min.Y}}
 		}),
 		layout.Rigid(func(gtx C) D {
-			if !a.isRunning {
+			if a.runState != stateRunning {
 				gtx = gtx.Disabled()
 			}
 			btn := material.Button(a.theme, &a.cancelBtn, "Cancel")
@@ -485,7 +485,7 @@ func (a *appState) layoutProgress(gtx C) D {
 			if a.progress.TotalFiles > 0 {
 				info += fmt.Sprintf("  |  %d / %d files", a.progress.CurrentFile, a.progress.TotalFiles)
 			}
-			if a.isRunning {
+			if a.runState == stateRunning {
 				dots := int(gtx.Now.UnixMilli()/500) % 4 // cycle 0..3 every 500ms
 				info += fmt.Sprintf("  |  Processing%s", "...."[:dots+1])
 				// Request continuous redraw for animation
