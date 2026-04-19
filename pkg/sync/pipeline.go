@@ -448,8 +448,22 @@ func (p *Pipeline) runWorker(ctx context.Context, workerID int, report *models.S
 	defer wg.Done()
 
 	for {
+		// Soft-pause check: between files, exit if pause was requested.
+		// Buffered tasks still in the queue are abandoned; they were never
+		// processed and will be re-scanned on resume (not in the completion
+		// log), so no work is lost.
+		if p.pauseSoft != nil {
+			select {
+			case <-p.pauseSoft:
+				return
+			default:
+			}
+		}
+
 		select {
 		case <-ctx.Done():
+			return
+		case <-p.pauseSoft:
 			return
 		case task, ok := <-p.taskQueue:
 			if !ok {
