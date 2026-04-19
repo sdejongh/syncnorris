@@ -35,31 +35,39 @@ const (
 	fullWindowW      = configPanelWidth + separatorWidth + logPanelWidth + windowPadding
 )
 
-// layout draws the entire UI as two columns.
+// layout draws the entire UI: optional resume banner on top, then two columns.
 func (a *appState) layout(gtx C) D {
 	paint.FillShape(gtx.Ops, colorBg, clip.Rect{Max: gtx.Constraints.Max}.Op())
 
 	return layout.UniformInset(unit.Dp(12)).Layout(gtx, func(gtx C) D {
-		return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
-			// Left: config with fixed width
-			layout.Rigid(func(gtx C) D {
-				gtx.Constraints.Min.X = gtx.Dp(configPanelWidth)
-				gtx.Constraints.Max.X = gtx.Dp(configPanelWidth)
-				return a.layoutConfigColumn(gtx)
-			}),
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+			// Top: resume banner (zero height when not applicable)
+			layout.Rigid(a.layoutResumeBanner),
 
-			// Separator
-			layout.Rigid(func(gtx C) D {
-				return layout.Inset{Left: unit.Dp(12), Right: unit.Dp(12)}.Layout(gtx, func(gtx C) D {
-					size := gtx.Constraints.Max
-					size.X = gtx.Dp(unit.Dp(1))
-					paint.FillShape(gtx.Ops, colorBorder, clip.Rect{Max: size}.Op())
-					return D{Size: size}
-				})
-			}),
+			// Main: two-column content
+			layout.Flexed(1, func(gtx C) D {
+				return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
+					// Left: config with fixed width
+					layout.Rigid(func(gtx C) D {
+						gtx.Constraints.Min.X = gtx.Dp(configPanelWidth)
+						gtx.Constraints.Max.X = gtx.Dp(configPanelWidth)
+						return a.layoutConfigColumn(gtx)
+					}),
 
-			// Right: tabbed panel
-			layout.Flexed(1, a.layoutRightPanel),
+					// Separator
+					layout.Rigid(func(gtx C) D {
+						return layout.Inset{Left: unit.Dp(12), Right: unit.Dp(12)}.Layout(gtx, func(gtx C) D {
+							size := gtx.Constraints.Max
+							size.X = gtx.Dp(unit.Dp(1))
+							paint.FillShape(gtx.Ops, colorBorder, clip.Rect{Max: size}.Op())
+							return D{Size: size}
+						})
+					}),
+
+					// Right: tabbed panel
+					layout.Flexed(1, a.layoutRightPanel),
+				)
+			}),
 		)
 	})
 }
@@ -419,54 +427,105 @@ func (a *appState) labeledInput(gtx C, label string, editor *widget.Editor, hint
 
 // --- Action buttons ---
 
+// layoutActions renders the action button row, which varies based on runState:
+//   - stateIdle:    [Run] [Compare]
+//   - stateRunning: [Pause (soft)] [Pause (hard)] [Cancel]
+//   - statePaused:  [Resume] [Abandon]
 func (a *appState) layoutActions(gtx C) D {
-	return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
-		layout.Rigid(func(gtx C) D {
-			if a.runState == stateRunning {
-				gtx = gtx.Disabled()
-			}
-			btn := material.Button(a.theme, &a.syncBtn, "Sync")
-			btn.Background = colorSuccess
-			btn.CornerRadius = unit.Dp(6)
-			btn.Inset = layout.Inset{
-				Top: unit.Dp(10), Bottom: unit.Dp(10),
-				Left: unit.Dp(28), Right: unit.Dp(28),
-			}
-			btn.Font.Weight = font.Bold
-			return btn.Layout(gtx)
-		}),
-		layout.Rigid(spacer(10)),
-		layout.Rigid(func(gtx C) D {
-			if a.runState == stateRunning {
-				gtx = gtx.Disabled()
-			}
-			btn := material.Button(a.theme, &a.compareBtn, "Compare")
-			btn.Background = colorInfo
-			btn.CornerRadius = unit.Dp(6)
-			btn.Inset = layout.Inset{
-				Top: unit.Dp(10), Bottom: unit.Dp(10),
-				Left: unit.Dp(28), Right: unit.Dp(28),
-			}
-			btn.Font.Weight = font.Bold
-			return btn.Layout(gtx)
-		}),
-		layout.Flexed(1, func(gtx C) D {
-			return D{Size: image.Point{X: gtx.Constraints.Max.X, Y: gtx.Constraints.Min.Y}}
-		}),
-		layout.Rigid(func(gtx C) D {
-			if a.runState != stateRunning {
-				gtx = gtx.Disabled()
-			}
-			btn := material.Button(a.theme, &a.cancelBtn, "Cancel")
-			btn.Background = colorCancel
-			btn.CornerRadius = unit.Dp(6)
-			btn.Inset = layout.Inset{
-				Top: unit.Dp(10), Bottom: unit.Dp(10),
-				Left: unit.Dp(20), Right: unit.Dp(20),
-			}
-			return btn.Layout(gtx)
-		}),
-	)
+	switch a.runState {
+	case stateRunning:
+		return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+			layout.Rigid(func(gtx C) D {
+				btn := material.Button(a.theme, &a.pauseSoftBtn, "Pause (soft)")
+				btn.Background = colorWarning
+				btn.CornerRadius = unit.Dp(6)
+				btn.Inset = layout.Inset{
+					Top: unit.Dp(10), Bottom: unit.Dp(10),
+					Left: unit.Dp(16), Right: unit.Dp(16),
+				}
+				btn.Font.Weight = font.Bold
+				return btn.Layout(gtx)
+			}),
+			layout.Rigid(spacer(10)),
+			layout.Rigid(func(gtx C) D {
+				btn := material.Button(a.theme, &a.pauseHardBtn, "Pause (hard)")
+				btn.Background = colorWarning
+				btn.CornerRadius = unit.Dp(6)
+				btn.Inset = layout.Inset{
+					Top: unit.Dp(10), Bottom: unit.Dp(10),
+					Left: unit.Dp(16), Right: unit.Dp(16),
+				}
+				btn.Font.Weight = font.Bold
+				return btn.Layout(gtx)
+			}),
+			layout.Flexed(1, func(gtx C) D {
+				return D{Size: image.Point{X: gtx.Constraints.Max.X, Y: gtx.Constraints.Min.Y}}
+			}),
+			layout.Rigid(func(gtx C) D {
+				btn := material.Button(a.theme, &a.cancelBtn, "Cancel")
+				btn.Background = colorCancel
+				btn.CornerRadius = unit.Dp(6)
+				btn.Inset = layout.Inset{
+					Top: unit.Dp(10), Bottom: unit.Dp(10),
+					Left: unit.Dp(20), Right: unit.Dp(20),
+				}
+				return btn.Layout(gtx)
+			}),
+		)
+
+	case statePaused:
+		return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+			layout.Rigid(func(gtx C) D {
+				btn := material.Button(a.theme, &a.resumeBtn, "Resume")
+				btn.Background = colorSuccess
+				btn.CornerRadius = unit.Dp(6)
+				btn.Inset = layout.Inset{
+					Top: unit.Dp(10), Bottom: unit.Dp(10),
+					Left: unit.Dp(28), Right: unit.Dp(28),
+				}
+				btn.Font.Weight = font.Bold
+				return btn.Layout(gtx)
+			}),
+			layout.Rigid(spacer(10)),
+			layout.Rigid(func(gtx C) D {
+				btn := material.Button(a.theme, &a.abandonBtn, "Abandon")
+				btn.Background = colorCancel
+				btn.CornerRadius = unit.Dp(6)
+				btn.Inset = layout.Inset{
+					Top: unit.Dp(10), Bottom: unit.Dp(10),
+					Left: unit.Dp(28), Right: unit.Dp(28),
+				}
+				return btn.Layout(gtx)
+			}),
+		)
+
+	default: // stateIdle
+		return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+			layout.Rigid(func(gtx C) D {
+				btn := material.Button(a.theme, &a.syncBtn, "Run")
+				btn.Background = colorSuccess
+				btn.CornerRadius = unit.Dp(6)
+				btn.Inset = layout.Inset{
+					Top: unit.Dp(10), Bottom: unit.Dp(10),
+					Left: unit.Dp(28), Right: unit.Dp(28),
+				}
+				btn.Font.Weight = font.Bold
+				return btn.Layout(gtx)
+			}),
+			layout.Rigid(spacer(10)),
+			layout.Rigid(func(gtx C) D {
+				btn := material.Button(a.theme, &a.compareBtn, "Compare")
+				btn.Background = colorInfo
+				btn.CornerRadius = unit.Dp(6)
+				btn.Inset = layout.Inset{
+					Top: unit.Dp(10), Bottom: unit.Dp(10),
+					Left: unit.Dp(28), Right: unit.Dp(28),
+				}
+				btn.Font.Weight = font.Bold
+				return btn.Layout(gtx)
+			}),
+		)
+	}
 }
 
 // --- Progress ---
