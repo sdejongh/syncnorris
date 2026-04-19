@@ -158,6 +158,15 @@ func Run() error {
 			if a.cancelFn != nil {
 				a.cancelFn()
 			}
+			// If a job is active, persist it as paused so the next
+			// launch offers resume immediately (without waiting for the
+			// heartbeat to go stale).
+			if a.activeJob != nil && a.jobStore != nil && a.runState == stateRunning {
+				_ = a.jobStore.SetStatus(a.activeJob.ID, job.StatusPaused)
+			}
+			if a.heartbeat != nil {
+				a.heartbeat.Stop()
+			}
 			a.saveSettings()
 			return e.Err
 		case app.FrameEvent:
