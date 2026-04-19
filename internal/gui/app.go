@@ -128,8 +128,21 @@ type appState struct {
 
 // Run starts the GUI window and event loop.
 func Run() error {
+	// Enforce single instance before creating any GUI state.
+	cfgDir, err := os.UserConfigDir()
+	if err != nil {
+		cfgDir = os.TempDir()
+	}
+	lockPath := filepath.Join(cfgDir, "syncnorris", "app.lock")
+	lock, err := AcquireInstanceLock(lockPath)
+	if err != nil {
+		return fmt.Errorf("syncnorris is already running: %w", err)
+	}
+	defer lock.Release()
+
 	a := &appState{
-		events: make(chan UIEvent, 500),
+		events:       make(chan UIEvent, 500),
+		instanceLock: lock,
 	}
 	a.init()
 
