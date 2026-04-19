@@ -396,21 +396,21 @@ func (p *Pipeline) scanSourceAndQueue(ctx context.Context, report *models.SyncRe
 			}
 		}
 
-		// Update totals
-		p.totalFiles.Add(1)
-		p.totalBytes.Add(f.Size)
-
-		// Update formatter with new totals
-		if p.formatter != nil {
-			p.formatter.Progress(output.ProgressUpdate{
-				Type:       "scan_progress",
-				TotalFiles: int(p.totalFiles.Load()),
-				TotalBytes: p.totalBytes.Load(),
-			})
-		}
-
-		// Create task and add to queue
+		// Create task and add to queue; only update totals once the task is
+		// actually enqueued so counters never over-report on a soft-pause.
 		task := NewFileTask(f.RelativePath, f.Size, f.ModTime)
+
+		enqueueTask := func() {
+			p.totalFiles.Add(1)
+			p.totalBytes.Add(f.Size)
+			if p.formatter != nil {
+				p.formatter.Progress(output.ProgressUpdate{
+					Type:       "scan_progress",
+					TotalFiles: int(p.totalFiles.Load()),
+					TotalBytes: p.totalBytes.Load(),
+				})
+			}
+		}
 
 		if p.pauseSoft != nil {
 			select {
@@ -421,6 +421,7 @@ func (p *Pipeline) scanSourceAndQueue(ctx context.Context, report *models.SyncRe
 				// Stop producing; let already-queued tasks drain through workers.
 				return errSoftPaused
 			case p.taskQueue <- task:
+				enqueueTask()
 				return nil
 			}
 		}
@@ -429,6 +430,7 @@ func (p *Pipeline) scanSourceAndQueue(ctx context.Context, report *models.SyncRe
 		case <-ctx.Done():
 			return ctx.Err()
 		case p.taskQueue <- task:
+			enqueueTask()
 			return nil
 		}
 	})
