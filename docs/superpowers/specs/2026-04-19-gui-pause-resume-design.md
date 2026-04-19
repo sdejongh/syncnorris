@@ -124,7 +124,7 @@ Tout est sous `os.UserConfigDir() / syncnorris /` (cohérent avec les settings G
 2. GUI met `status=paused` dans le JSON, arrête le heartbeat
 3. GUI ferme `PauseSoft` du pipeline
 4. Le scanner arrête de pousser de nouvelles tâches
-5. Les workers finissent les fichiers en cours (le `.partial` subit un rename final et une entrée est ajoutée au CompletionLog)
+5. Les workers finissent uniquement le fichier qu'ils sont en train de copier (le `.partial` subit un rename final et une entrée est ajoutée au CompletionLog) ; les tâches encore en queue mais pas démarrées sont abandonnées sans effet secondaire (aucune copie à rollback)
 6. Les workers passent en attente, le pipeline reste vivant mais idle (pour permettre un Resume rapide sans recharger le CompletionLog)
 7. UI affiche « Paused — N fichiers traités, M restants »
 
