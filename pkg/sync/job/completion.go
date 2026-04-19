@@ -2,6 +2,7 @@ package job
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -90,14 +91,13 @@ func (c *CompletionLog) Close() error {
 	if c.file == nil {
 		return nil
 	}
-	if err := c.buf.Flush(); err != nil {
-		_ = c.file.Close()
-		c.file = nil
-		return err
-	}
-	err := c.file.Close()
+	flushErr := c.flushLocked()
+	closeErr := c.file.Close()
 	c.file = nil
-	return err
+	if flushErr != nil {
+		return flushErr
+	}
+	return closeErr
 }
 
 // LoadCompletionLog reads a log file into memory. Malformed lines are
@@ -106,7 +106,7 @@ func LoadCompletionLog(path string) (map[string]CompletionEntry, error) {
 	result := make(map[string]CompletionEntry)
 	f, err := os.Open(path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return result, nil
 		}
 		return nil, err
