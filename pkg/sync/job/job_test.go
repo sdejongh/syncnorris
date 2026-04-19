@@ -47,6 +47,9 @@ func TestJobJSONRoundtrip(t *testing.T) {
 	if !decoded.Heartbeat.Equal(original.Heartbeat) {
 		t.Errorf("Heartbeat mismatch")
 	}
+	if !decoded.CreatedAt.Equal(original.CreatedAt) {
+		t.Errorf("CreatedAt mismatch")
+	}
 }
 
 func TestJobStatusConstants(t *testing.T) {

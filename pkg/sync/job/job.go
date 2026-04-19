@@ -4,6 +4,7 @@ package job
 
 import "time"
 
+// Status represents the lifecycle state of a sync job.
 type Status string
 
 const (
@@ -12,9 +13,9 @@ const (
 	StatusCompleted Status = "completed"
 )
 
-// Options captures the user-selected run configuration we need to
-// restore on resume. Mirrors internal/gui.RunOptions but lives here
-// to avoid a dependency on the GUI package.
+// Options captures the subset of RunOptions needed to resume a
+// one-way sync. It lives in this package (not internal/gui) to
+// avoid an import cycle and to remain importable from the CLI.
 type Options struct {
 	Mode            string   `json:"mode"`
 	Comparator      string   `json:"comparator"`
@@ -26,6 +27,8 @@ type Options struct {
 	ExcludePatterns []string `json:"exclude_patterns"`
 }
 
+// Job holds persisted metadata for a one-way sync job, enabling
+// pause and resume across application restarts.
 type Job struct {
 	ID            string    `json:"id"`
 	Source        string    `json:"source"`
