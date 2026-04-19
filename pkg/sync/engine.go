@@ -66,7 +66,10 @@ func (e *Engine) Run(ctx context.Context) (*models.SyncReport, error) {
 func (e *Engine) runPipeline(ctx context.Context) (*models.SyncReport, error) {
 	cfg := e.pipelineConfig
 	if cfg.MaxWorkers == 0 {
-		cfg = DefaultPipelineConfig()
+		cfg.MaxWorkers = 5
+	}
+	if cfg.QueueSize == 0 {
+		cfg.QueueSize = 1000
 	}
 
 	pipeline := NewPipeline(
@@ -86,7 +89,10 @@ func (e *Engine) runPipeline(ctx context.Context) (*models.SyncReport, error) {
 func (e *Engine) runBidirectional(ctx context.Context) (*models.SyncReport, error) {
 	cfg := e.pipelineConfig
 	if cfg.MaxWorkers == 0 {
-		cfg = DefaultPipelineConfig()
+		cfg.MaxWorkers = 5
+	}
+	if cfg.QueueSize == 0 {
+		cfg.QueueSize = 1000
 	}
 
 	pipeline := NewBidirectionalPipeline(

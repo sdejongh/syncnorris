@@ -195,6 +195,13 @@ func (p *Pipeline) Run(ctx context.Context) (*models.SyncReport, error) {
 		}
 		p.completionLog = cl
 		defer func() { _ = p.completionLog.Close() }()
+
+		// Configure a job-scoped partial suffix on the local backend so that
+		// abandonJob in the GUI can locate and remove residual .partial files
+		// by walking the destination for the right suffix pattern.
+		if ld, ok := p.dest.(*storage.Local); ok {
+			ld.SetPartialSuffix(fmt.Sprintf(".syncnorris-%s.partial", p.job.ID[:8]))
+		}
 	}
 
 	// Phase 1: Scan destination first (we need this for comparisons)
